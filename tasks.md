@@ -14,6 +14,7 @@
 - D4 通知：**仅用 `expo-notifications` 本地调度**，不接云端推送；国产 Android 准点/补发风险以真机验收为准（plan 1.4）。
 - D5 贺卡截图与分享：**`react-native-view-shot` + `expo-media-library` + 系统 `Share`**。
 - D6 AI 服务商：**DeepSeek**，经 Supabase Edge Functions 中转，API Key 只存服务端。
+- 登录方式（**2026-10-28 开发者拍板变更**）：由原 Supabase Auth 邮箱验证码（OTP）改为**邮箱 + 密码登录**，并提供「忘记密码」邮件重置（App 输入邮箱发信 → 浏览器打开公网托管的重置页设置新密码 → 回 App 用新密码登录）；重置回跳页静态托管于 GitHub Pages（`web/` 目录、`gh-pages` 分支）。spec 第 14 条、plan 已同步。仅登录认证提前到 M2 后实施，云端表/数据上云仍在 M12（T54/T56）。
 - 轻量状态管理：**Zustand**。
 - 视觉规范按 `design/prototype.html`、`design/preview.png` 执行：天青底 `#E9F0EB`、信纸白 `#FBFCF8`、松墨 `#26332B`、松绿 `#356453`、蜜蜡 `#C98F3D`、苔绿 `#BFD0C5`；宋体标题、正文黑体、贺卡祝福用手写体。
 - `design/preview.png` 顶部的"视频预览"概念屏仅为宣传素材，**不进 App**，第一版不做任何启动视频/App 内视频功能。
@@ -23,7 +24,7 @@
 | 里程碑 | 内容 | 对应 plan 阶段 | 对应 spec 条目 |
 | --- | --- | --- | --- |
 | M1 | ✅ 搭页面骨架（三个底部 Tab 可切换、文字标识当前页）· 已完成 2026-10-28 | 阶段 0（页面部分） | 全局规则 5（信息架构） |
-| M2 | 本地数据基座 | 阶段 0（数据部分） | — |
+| M2 | ✅ 本地数据基座 · 已完成 2026-10-28 | 阶段 0（数据部分） | — |
 | M3 | 人员档案与首次引导 | 阶段 1 | 第 1、2、3 条 |
 | M4 | 日子引擎、首页与提醒设置 | 阶段 2 | 第 4 条列表、第 5 条 |
 | M5 | 本地提醒与心意详情壳 | 阶段 3 | 第 6 条、第 7 条推送部分 |
@@ -76,46 +77,48 @@
 
 ---
 
-# M2　本地数据基座
+# M2　本地数据基座 ✅ 已完成（2026-10-28）
 
 > 全部数据先只存本机（Expo SQLite），经 Repository 接口访问，为阶段 12 切换 Supabase 预留。
 
-### T05　SQLite 初始化与版本迁移机制
+> **完成记录（2026-10-28）**：T05–T10 全部完成。接入 `expo-sqlite`（~58.0.14）与 `expo-crypto`（UUID v4）；`src/data/db.ts` 启动时打开 `xinyi.db` 并执行版本化迁移（`schema_migrations` 表 + 事务内逐版本执行）；`001_init.ts` 按 data-model 第 2、5、7.2 节建好 11 张表（CHECK 枚举约束、查询索引、三个 COALESCE 表达式唯一索引、7 张上云表预留 user_id/created_at/updated_at/deleted）及默认数据（app_settings 单行 3/9/3/pending、festival_settings 六行全开）。`src/data/entities.ts` 为全部实体与枚举的 TS 契约，`src/data/repository/types.ts` 定义三组仓储接口与聚合 DataRepository，sqlite 实现分人员/设置/内容三仓储 + 聚合类（deletePerson 为跨九表事务物理级联，预留 M5 待送达通知取消钩子）；`getRepository()` 依赖注入入口供 M12 无感切换 Supabase。启动布局已在首屏前完成迁移。真机（Expo Go 58.0.5）通过临时冒烟脚本验证全部关键路径后已移除；`npm run typecheck`、`npm run lint` 通过，M1 页面无回归。
+
+### T05　SQLite 初始化与版本迁移机制 ✅
 
 - **做什么**：接入 `expo-sqlite`，App 启动时打开数据库并执行版本化迁移（migration），后续表结构变更只追加迁移文件。
 - **涉及文件 / 页面**：`src/data/db.ts`、`src/data/migrations/`。
 - **完成后用户能看到什么**：无独立界面；App 启动后数据库就绪，升级安装不丢已有数据。
 - **前置**：T01；**可并行**：可与 T02、T03、T04 并行。
 
-### T06　初始表结构与默认数据
+### T06　初始表结构与默认数据 ✅
 
 - **做什么**：按 data-model 第 2、5、7.2 节写首版 DDL：`persons`、`anniversaries`、`traits`、`app_settings`、`person_reminder_settings`、`festival_settings`、`content_snapshots`、`card_states`、`favorites`、`sent_records`、`notification_log` 共 11 张表；含主键、查询索引、COALESCE 表达式唯一索引（"人 × 日子 × 年份""日子 × 年份"）；上云 7 表本机即预留 `user_id`（NULL）、`created_at`、`updated_at`、`deleted` 列；初始化 `app_settings` 单行（`id=1`，`global_advance_days=3`、`delivery_hour=9`、`blessing_count=3`、`ai_consent='pending'`）与 `festival_settings` 六行（`new_year`、`valentines_day`、`mothers_day`、`fathers_day`、`thanksgiving`、`christmas`，`disabled=0`）。
 - **涉及文件 / 页面**：`src/data/migrations/001_init.ts`（或 `.sql`）。
 - **完成后用户能看到什么**：无独立界面；首次启动后库表与默认值就绪，设置默认值即"提前三天、上午 9:00、祝福三条"。
 - **前置**：T05。
 
-### T07　Repository 接口与实体类型
+### T07　Repository 接口与实体类型 ✅
 
 - **做什么**：按 data-model 定义全部 TypeScript 实体类型与 Repository 接口（人员、纪念日、特征、设置、单人提醒覆盖、节日开关、快照、贺卡状态、收藏、往年记录、通知日志），UI 与业务模块只依赖接口、不直接碰 SQLite。
 - **涉及文件 / 页面**：`src/data/entities.ts`、`src/data/repository/types.ts`。
 - **完成后用户能看到什么**：无独立界面；是后续所有页面的数据契约。
 - **前置**：T06。
 
-### T08　SQLite Repository：人员档案部分
+### T08　SQLite Repository：人员档案部分 ✅
 
 - **做什么**：实现 `persons`、`anniversaries`、`traits` 的增删改查；实现 `deletePerson` 事务方法，一次性物理级联删除该人的档案、纪念日、特征及后续全部关联表数据（`person_reminder_settings`、`content_snapshots`、`card_states`、`favorites`、`sent_records`、`notification_log`），并预留"取消其待送达通知"的调用位（M5 接入）。
 - **涉及文件 / 页面**：`src/data/repository/sqlite/`（人员相关实现）。
 - **完成后用户能看到什么**：无独立界面；支撑 M3 人员的增改删与 spec 第 2 条的级联删除。
 - **前置**：T07。
 
-### T09　SQLite Repository：设置部分
+### T09　SQLite Repository：设置部分 ✅
 
 - **做什么**：实现 `app_settings`（单行读写）、`person_reminder_settings`（一人一行：`advance_days` 覆盖、`disabled` 开关）、`festival_settings`（六行开关）的读写。
 - **涉及文件 / 页面**：`src/data/repository/sqlite/`（设置相关实现）。
 - **完成后用户能看到什么**：无独立界面；支撑 M4 设置页全部开关与数值持久化。
 - **前置**：T07；**可并行**：T08、T09、T10 三项可并行开发。
 
-### T10　SQLite Repository：内容与运行数据部分
+### T10　SQLite Repository：内容与运行数据部分 ✅
 
 - **做什么**：实现 `content_snapshots`（按唯一键 upsert/读取、状态与 `fail_count` 更新）、`card_states`、`favorites`、`sent_records`、`notification_log`（登记、去重查询、状态流转）的读写。
 - **涉及文件 / 页面**：`src/data/repository/sqlite/`（内容相关实现）。
@@ -496,12 +499,14 @@
 - **完成后用户能看到什么**：无独立界面；登录后数据有归属、用户互相隔离。
 - **前置**：G-A6 拍板。
 
-### T55　邮箱验证码登录 / 退出与设置页账号区
+### T55　邮箱密码登录 / 忘记密码 / 退出与设置页账号区 ✅（认证部分提前完成，2026-10-28）
 
-- **做什么**：实现 `/login`：输入邮箱 → 获取验证码 → 填写验证码登录（Supabase Auth 邮箱 OTP）；登录态由 SDK 保持，重开 App 不需重复登录；提供退出登录；设置页账号入口未登录显示「登录」，已登录显示账号与「退出登录」。
-- **涉及文件 / 页面**：`app/login.tsx`、`app/(tabs)/settings.tsx` 账号区、`src/features/account/`。
-- **完成后用户能看到什么**：可用邮箱验证码登录，关闭重开仍登录；可退出，退出后回到未登录入口。
-- **前置**：T54。
+- **做什么**：实现 `/login`：输入邮箱 + 密码登录（Supabase Auth `signInWithPassword`）；提供「忘记密码」：输入邮箱 → `resetPasswordForEmail` 发送重置邮件（`redirectTo` 指向公网托管的重置页）→ 用户在邮件链接打开的网页设置新密码 → 回 App 用新密码登录、旧密码失效；登录态由 SDK（AsyncStorage）保持，重开 App 不需重复登录；提供退出登录；设置页账号入口未登录显示「登录」，已登录显示账号与「退出登录」。
+- **涉及文件 / 页面**：`app/login.tsx`、`app/(tabs)/settings.tsx` 账号区、`src/features/account/`、`src/lib/supabase.ts`、公网重置页 `web/index.html`。
+- **完成后用户能看到什么**：可用邮箱密码登录，忘记密码能收邮件改密并用新密码登录，关闭重开仍登录；可退出，退出后回到未登录入口。
+- **前置**：T54（云端表与数据迁移部分）。**注：邮箱密码登录、忘记密码、会话保持与退出已于 2026-10-28 应开发者要求提前实现（M2 之后）；设置页账号区同步接入；T54 云端表、T56 数据上云仍按 M12 排期。**
+
+> **完成记录（2026-10-28，提前实施）**：`@supabase/supabase-js` + `@react-native-async-storage/async-storage`；`src/lib/supabase.ts`（AsyncStorage 持久化会话、detectSessionInUrl=false、回跳 GitHub Pages 重置页）；`src/features/account/authStore.ts`（Zustand：会话恢复/订阅、signInWithPassword、resetPasswordForEmail、signOut，报错中文化）；`app/login.tsx` 重写为邮箱密码登录 + 忘记密码两模式；`app/(tabs)/settings.tsx` 接入账号区（未登录入口/已登录邮箱+退出确认）；根布局启动时初始化登录态（不阻塞首屏）。Supabase 后台已配：Site URL / Redirect URLs 指向 `https://sunwang33.github.io/AI-xinyi-butler/`，自定义 SMTP（Resend 共享测试域名，仅可投递已验证邮箱）。**真机 E2E 通过**：发重置邮件 → 回跳公网页改密成功 → 旧密码登录被拒、新密码可登录、退出与重开会话保持正常。typecheck/lint 通过。
 
 ### T56　SupabaseRepository、数据迁移与数据源切换
 
@@ -519,7 +524,7 @@
 
 ### T58　账号链路真机验收
 
-- **做什么**：真机验收验证码邮件登录、重开保持登录、退出登录、卸载重装/换机恢复、离线查看缓存，并对未登录完整路径做回归。
+- **做什么**：真机验收邮箱密码登录（含忘记密码收信改密、新密码可登录/旧密码失效）、重开保持登录、退出登录、卸载重装/换机恢复、离线查看缓存，并对未登录完整路径做回归。
 - **涉及文件 / 页面**：`docs/qa/` 验收记录。
 - **完成后用户能看到什么**：以上场景全部符合预期，未登录路径无回归。
 - **前置**：T56、T57。
@@ -586,16 +591,16 @@
 | T03 ✅ | 建立首页 / 收藏 / 设置三个底部 Tab 骨架并可切换 |
 | T04 ✅ | 建好其余 9 个页面的路由占位 |
 
-## M2　本地数据基座
+## M2　本地数据基座 ✅（已完成 2026-10-28）
 
 | 编号 | 一句话标题 |
 | --- | --- |
-| T05 | 接入 Expo SQLite 与版本化迁移机制 |
-| T06 | 创建 11 张表、索引及设置/节日默认数据 |
-| T07 | 定义全部实体类型与 Repository 接口 |
-| T08 | 实现人员/纪念日/特征的 SQLite Repository 与级联删除 |
-| T09 | 实现设置、单人提醒覆盖、节日开关的 Repository |
-| T10 | 实现快照、贺卡状态、收藏、往年记录、通知日志的 Repository |
+| T05 ✅ | 接入 Expo SQLite 与版本化迁移机制 |
+| T06 ✅ | 创建 11 张表、索引及设置/节日默认数据 |
+| T07 ✅ | 定义全部实体类型与 Repository 接口 |
+| T08 ✅ | 实现人员/纪念日/特征的 SQLite Repository 与级联删除 |
+| T09 ✅ | 实现设置、单人提醒覆盖、节日开关的 Repository |
+| T10 ✅ | 实现快照、贺卡状态、收藏、往年记录、通知日志的 Repository |
 
 ## M3　人员档案与首次引导
 
@@ -696,7 +701,7 @@
 | --- | --- |
 | ⛳ G-A6 | 拍板：本机/云端合并冲突、退出后本机数据去留、离线缓存口径 |
 | T54 | 创建 Postgres 7 张上云表、CHECK/唯一索引与 RLS 策略 |
-| T55 | 实现邮箱验证码登录/退出与设置页账号区 |
+| T55 | 实现邮箱密码登录（含忘记密码邮件重置）/退出与设置页账号区（认证部分已提前实施） |
 | T56 | 实现 SupabaseRepository、首登迁移合并与离线缓存 |
 | T57 | Edge Functions 增加 JWT 校验并保留匿名通道，补充服务说明 |
 | T58 | 账号链路真机验收（含换机恢复与未登录回归） |
