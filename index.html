@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <!-- Supabase 重置链接以 hash 回传 access_token，禁止浏览器把 token 发往 referer -->
+  <meta name="referrer" content="no-referrer" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>重置密码 · AI 心意管家</title>
+  <style>
+    /* 配色呼应 App 设计令牌（tokens.ts）：天青底、信纸白、松墨、松绿、蜜蜡 */
+    :root {
+      --mist: #E9F0EB;
+      --paper: #FBFCF8;
+      --ink: #26332B;
+      --ink-soft: #5E6E63;
+      --pine: #356453;
+      --honey: #C98F3D;
+      --line: #D2DFD6;
+      --red: #B34233;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: var(--mist);
+      color: var(--ink);
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+    .card {
+      width: 100%;
+      max-width: 380px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px 24px 24px;
+      box-shadow: 0 8px 28px rgba(38, 51, 43, 0.08);
+    }
+    h1 {
+      font-family: "Songti SC", "SimSun", "Noto Serif SC", serif;
+      font-size: 22px;
+      margin: 0 0 6px;
+    }
+    .sub { color: var(--ink-soft); font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
+    label { display: block; font-size: 14px; margin: 14px 0 6px; }
+    .pw-wrap { position: relative; }
+    input[type="password"], input[type="text"] {
+      width: 100%;
+      font-size: 16px;
+      padding: 12px 44px 12px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      outline: none;
+    }
+    input:focus { border-color: var(--pine); }
+    .toggle-eye {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      border: 0; background: transparent; color: var(--ink-soft);
+      font-size: 13px; padding: 6px; cursor: pointer;
+    }
+    button.primary {
+      width: 100%;
+      margin-top: 22px;
+      padding: 13px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--pine);
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button.primary:disabled { opacity: 0.55; cursor: default; }
+    .msg { margin-top: 14px; font-size: 13px; line-height: 1.6; display: none; }
+    .msg.error { display: block; color: var(--red); }
+    .msg.ok { display: block; color: var(--pine); }
+    .state { text-align: center; padding: 12px 0 4px; }
+    .state .big { font-size: 17px; margin-bottom: 8px; }
+    .state p { color: var(--ink-soft); font-size: 14px; line-height: 1.7; margin: 0 0 16px; }
+    .hidden { display: none !important; }
+    .dot { color: var(--honey); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>重置密码</h1>
+
+    <!-- 状态 1：链接无效 / 已过期 -->
+    <section id="state-invalid" class="state hidden">
+      <div class="big">链接无效或已过期</div>
+      <p>重置链接仅在短时间内有效，且只能使用一次。请回到 App 重新发起「忘记密码」，用新邮件里的链接打开本页。</p>
+    </section>
+
+    <!-- 状态 2：设置新密码 -->
+    <section id="state-form" class="hidden">
+      <p class="sub">为你的 AI 心意管家账号设置一个新密码，设置完成后请用新密码登录。</p>
+      <form id="reset-form" autocomplete="on">
+        <label for="password">新密码</label>
+        <div class="pw-wrap">
+          <input id="password" name="password" type="password" minlength="6"
+                 placeholder="至少 6 位" autocomplete="new-password" required />
+          <button type="button" class="toggle-eye" data-target="password">显示</button>
+        </div>
+        <label for="confirm">确认新密码</label>
+        <div class="pw-wrap">
+          <input id="confirm" name="confirm" type="password" minlength="6"
+                 placeholder="再输入一次" autocomplete="new-password" required />
+          <button type="button" class="toggle-eye" data-target="confirm">显示</button>
+        </div>
+        <button class="primary" id="submit" type="submit">确认重置</button>
+        <div id="msg" class="msg"></div>
+      </form>
+    </section>
+
+    <!-- 状态 3：成功 -->
+    <section id="state-success" class="state hidden">
+      <div class="big">密码已更新 <span class="dot">●</span></div>
+      <p>现在可以回到 AI 心意管家，用新密码登录了。</p>
+    </section>
+  </main>
+
+  <script>
+    // 与 Supabase 项目绑定（项目引用与公开 anon key，可公开，数据受 RLS 保护）
+    var SUPABASE_URL = 'https://wohcvgarvrizbbcepggg.supabase.co';
+    var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvaGN2Z2FydnJpemJiY2VwZ2dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxNzI5NTIsImV4cCI6MjEwODc0ODk1Mn0.OLSxt0C4TUnYPLmSz5YbnqlHUucWmZMsnpDAsPPyPLo';
+
+    function show(id) {
+      ['state-invalid', 'state-form', 'state-success'].forEach(function (s) {
+        document.getElementById(s).classList.toggle('hidden', s !== id);
+      });
+    }
+
+    // 解析重置邮件回跳地址中的 #access_token=...&type=recovery
+    function parseHash() {
+      var out = {};
+      new URLSearchParams(location.hash.slice(1)).forEach(function (v, k) { out[k] = v; });
+      return out;
+    }
+
+    function showError(text) {
+      var msg = document.getElementById('msg');
+      msg.className = 'msg error';
+      msg.textContent = text;
+    }
+
+    var params = parseHash();
+    var accessToken = params.access_token || '';
+    // Supabase 找回密码回跳固定为 type=recovery；没有有效 token 则拒绝
+    if (!accessToken || params.type !== 'recovery') {
+      show('state-invalid');
+    } else {
+      show('state-form');
+    }
+
+    // 显示 / 隐藏密码
+    document.querySelectorAll('.toggle-eye').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var input = document.getElementById(btn.dataset.target);
+        var showText = input.type === 'password';
+        input.type = showText ? 'text' : 'password';
+        btn.textContent = showText ? '隐藏' : '显示';
+      });
+    });
+
+    document.getElementById('reset-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var password = document.getElementById('password').value;
+      var confirm = document.getElementById('confirm').value;
+      var btn = document.getElementById('submit');
+
+      if (password.length < 6) {
+        showError('密码至少需要 6 位。');
+        return;
+      }
+      if (password !== confirm) {
+        showError('两次输入的密码不一致，请重新确认。');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '提交中…';
+      try {
+        var resp = await fetch(SUPABASE_URL + '/auth/v1/user', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + accessToken,
+          },
+          body: JSON.stringify({ password: password }),
+        });
+
+        if (!resp.ok) {
+          var detail = '';
+          try { detail = (await resp.json()).msg || ''; } catch (_) {}
+          if (resp.status === 401 || resp.status === 403) {
+            show('state-invalid');
+            return;
+          }
+          if (resp.status === 422 && /password/i.test(detail)) {
+            showError('密码不符合安全要求（至少 6 位，避免过于简单的密码），请换一个再试。');
+          } else {
+            showError('重置失败，请稍后重试，或回到 App 重新发起。' + (detail ? '（' + detail + '）' : ''));
+          }
+          return;
+        }
+
+        // 成功后注销本网页的临时会话，避免浏览器残留登录态
+        try {
+          await fetch(SUPABASE_URL + '/auth/v1/logout', {
+            method: 'POST',
+            headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + accessToken },
+          });
+        } catch (_) { /* 忽略注销失败，密码已经更新成功 */ }
+
+        show('state-success');
+      } catch (err) {
+        showError('网络异常，请检查网络后重试。');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '确认重置';
+      }
+    });
+  </script>
+</body>
+</html>
