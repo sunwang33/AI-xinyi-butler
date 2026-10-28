@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 心意管家 · 第一版原型图</title>
+<link rel="preconnect" href="https://fonts.loli.net">
+<link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&family=Ma+Shan+Zheng&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet">
+<style>
+/* ============ 设计令牌 ============ */
+:root{
+  --mist:#E9F0EB;          /* 天青底 */
+  --mist-deep:#DCE7E0;
+  --paper:#FBFCF8;         /* 信纸白 */
+  --paper-dim:#F3F7F3;
+  --ink:#26332B;           /* 松墨 */
+  --ink-soft:#5E6E63;
+  --ink-faint:#8FA196;
+  --pine:#356453;          /* 松绿主色 */
+  --pine-deep:#274C3E;
+  --sage:#BFD0C5;          /* 苔绿分隔 */
+  --sage-soft:#D8E4DC;
+  --honey:#C98F3D;         /* 蜜蜡：邮戳/强调 */
+  --honey-deep:#A9732C;
+  --honey-wash:#F2E6CE;
+  --night:#23453F;         /* 模板「月夜」深青（非黑） */
+  --line:#D2DFD6;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --sans:"Noto Sans SC",-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  --hand:"Ma Shan Zheng","STKaiti","KaiTi","楷体",cursive;
+  --num:"Cormorant Garamond","Noto Serif SC",serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  font-family:var(--sans);color:var(--ink);
+  background:#D7E0D9;
+  background-image:radial-gradient(#C9D6CC 1px,transparent 1px);
+  background-size:22px 22px;
+  padding:56px 24px 96px;
+}
+/* ============ 画廊框架 ============ */
+.gallery{max-width:1680px;margin:0 auto;}
+.gallery-head{max-width:880px;margin:0 auto 20px;text-align:center;}
+.gallery-head h1{font-family:var(--serif);font-size:34px;font-weight:600;letter-spacing:.06em;}
+.gallery-head p{margin-top:10px;color:var(--ink-soft);font-size:14px;line-height:1.9;}
+.tokens{max-width:1080px;margin:28px auto 0;display:flex;flex-wrap:wrap;gap:14px;justify-content:center;}
+.token{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink-soft);}
+.swatch{width:26px;height:26px;border-radius:7px;border:1px solid rgba(38,51,43,.15);}
+.token b{color:var(--ink);font-weight:500;font-family:var(--num);font-size:13px;}
+.flow{margin:64px auto 22px;max-width:1400px;display:flex;align-items:baseline;gap:14px;border-bottom:1.5px solid var(--pine);padding-bottom:10px;}
+.flow .seq{font-family:var(--serif);font-size:22px;color:var(--pine-deep);font-weight:600;}
+.flow h2{font-family:var(--serif);font-size:20px;font-weight:600;}
+.flow span{font-size:12.5px;color:var(--ink-soft);}
+.frames{display:flex;flex-wrap:wrap;gap:40px 34px;justify-content:center;max-width:1400px;margin:0 auto;}
+.frame{width:390px;}
+.frame > .cap{margin:14px 4px 0;font-size:12.5px;color:var(--ink-soft);line-height:1.7;}
+.frame > .cap b{color:var(--pine-deep);font-weight:600;}
+/* ============ 手机外壳 ============ */
+.phone{
+  width:390px;height:844px;background:var(--mist);
+  border-radius:40px;overflow:hidden;position:relative;
+  box-shadow:0 2px 0 #BFCFC4,0 18px 40px rgba(30,48,39,.22),0 42px 90px rgba(30,48,39,.18);
+  border:1px solid #C4D2C8;
+  display:flex;flex-direction:column;
+}
+.statusbar{
+  height:42px;flex:none;display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px;font-size:13px;font-weight:600;color:var(--ink);
+}
+.statusbar .sb-icons{display:flex;gap:5px;align-items:center;}
+.screen{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;}
+.scroll{flex:1;overflow:hidden;padding:0 18px 16px;}
+/* ============ 底部标签栏（首页 / 收藏 / 设置） ============ */
+.tabbar{
+  flex:none;height:74px;background:rgba(251,252,248,.96);
+  border-top:1px solid var(--line);
+  display:flex;padding-bottom:8px;
+}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-faint);font-size:11.5px;text-decoration:none;}
+.tab.on{color:var(--pine-deep);font-weight:600;}
+.tab svg{width:23px;height:23px;}
+.tab.on .tab-dot{width:5px;height:5px;border-radius:50%;background:var(--honey);margin-top:-1px;}
+.tab .tab-dot{width:5px;height:5px;}
+/* ============ 通用元素 ============ */
+.apphdr{display:flex;align-items:flex-end;justify-content:space-between;padding:6px 4px 14px;}
+.apphdr .greet{font-family:var(--serif);font-size:24px;font-weight:600;letter-spacing:.02em;}
+.apphdr .sub{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+.linkbtn{font-size:12.5px;color:var(--pine);background:none;border:none;font-family:var(--sans);display:inline-flex;align-items:center;gap:4px;}
+.postmark{
+  width:48px;height:48px;border-radius:50%;border:1.6px solid var(--honey);
+  color:var(--honey-deep);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-family:var(--num);line-height:1;flex:none;position:relative;background:rgba(255,255,255,.35);
+}
+.postmark::after{content:"";position:absolute;inset:4px;border-radius:50%;border:1px dashed rgba(201,143,61,.55);}
+.postmark b{font-size:17px;font-weight:600;}
+.postmark em{font-style:normal;font-family:var(--sans);font-size:8.5px;letter-spacing:.12em;margin-top:2px;}
+/* 邮票方块 */
+.stamp{
+  width:54px;height:66px;flex:none;border-radius:6px;position:relative;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--serif);font-size:24px;color:var(--pine-deep);
+  background:var(--paper);border:1.5px dashed var(--honey);
+}
+.stamp::before{content:"";position:absolute;inset:4px;border:1px solid var(--sage);border-radius:3px;}
+.stamp.sm{width:40px;height:50px;font-size:18px;}
+.stamp.tone-night{background:#E5EFEC;color:#23453F;border-color:#5E8A7F;}
+.stamp.tone-night::before{border-color:#9CBCB2;}
+.stamp.tone-warm{background:var(--honey-wash);color:var(--honey-deep);}
+.stamp.tone-warm::before{border-color:#E0BE86;}
+/* 明信片条目 */
+.pc-row{
+  background:var(--paper);border:1px solid var(--line);border-radius:14px;
+  padding:14px 14px 13px;display:flex;gap:13px;align-items:center;margin-bottom:11px;
+  position:relative;
+}
+.pc-row .who{font-family:var(--serif);font-size:16.5px;font-weight:600;}
+.pc-row .what{font-size:12px;color:var(--ink-soft);margin-top:3px;line-height:1.5;}
+.pc-row .mid{flex:1;min-width:0;}
+.pc-row .days{text-align:right;flex:none;}
+.pc-row .days b{font-family:var(--num);font-size:33px;font-weight:600;color:var(--pine-deep);line-height:1;}
+.pc-row .days span{display:block;font-size:10.5px;color:var(--ink-soft);margin-top:3px;letter-spacing:.15em;}
+.pc-row.today{border-color:var(--honey);background:linear-gradient(180deg,#FDFAF2,var(--paper) 70%);}
+.pc-row.today .days b{color:var(--honey-deep);font-size:21px;}
+.honey-dot{position:absolute;top:11px;right:12px;width:8px;height:8px;border-radius:50%;background:var(--honey);
+  box-shadow:0 0 0 3px rgba(201,143,61,.18);}
+.reltag{font-family:var(--sans);font-size:11px;color:var(--ink-soft);font-weight:400;margin-left:3px;}
+.secttl{font-family:var(--serif);font-size:16px;font-weight:600;margin:18px 2px 10px;display:flex;align-items:center;gap:9px;}
+.secttl::after{content:"";flex:1;height:1px;background:var(--sage);}
+.secttl .en{font-family:var(--num);font-style:italic;font-size:12px;color:var(--ink-faint);font-weight:400;}
+/* 按钮 */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  border-radius:999px;padding:12px 22px;font-size:14px;font-family:var(--sans);font-weight:500;
+  border:1px solid transparent;text-decoration:none;
+}
+.btn-pine{background:var(--pine);color:#fff;}
+.btn-ink{background:var(--pine-deep);color:#fff;}
+.btn-ghost{background:transparent;border-color:var(--sage);color:var(--pine-deep);}
+.btn-honey{background:var(--honey);color:#fff;}
+.btn-block{display:flex;width:100%;}
+.btn-sm{padding:7px 14px;font-size:12px;border-radius:999px;}
+/* 表单 */
+.field{margin-bottom:15px;}
+.field label{display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;}
+.field label i{font-style:normal;color:var(--honey-deep);margin-left:3px;}
+.input{
+  width:100%;background:var(--paper);border:1px solid var(--line);border-radius:11px;
+  padding:11px 13px;font-size:14px;font-family:var(--sans);color:var(--ink);
+}
+.input::placeholder{color:var(--ink-faint);}
+.input.mini{padding:8px 11px;font-size:13px;}
+.chips{display:flex;gap:8px;flex-wrap:wrap;}
+.chip{
+  border:1px solid var(--sage);background:var(--paper);color:var(--ink-soft);
+  border-radius:999px;padding:7px 15px;font-size:12.5px;font-family:var(--sans);
+}
+.chip.on{background:var(--pine);border-color:var(--pine);color:#fff;}
+.chip.ghost-on{background:var(--honey-wash);border-color:var(--honey);color:var(--honey-deep);}
+.hint{font-size:11px;color:var(--ink-faint);margin-top:5px;line-height:1.6;}
+/* 开关 */
+.toggle{width:42px;height:24px;border-radius:999px;background:var(--sage);position:relative;flex:none;}
+.toggle::after{content:"";position:absolute;top:2.5px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.toggle.on{background:var(--pine);}
+.toggle.on::after{left:20px;}
+/* 信纸祝福卡 */
+.letter{
+  position:relative;background:var(--paper);border:1px solid var(--line);border-radius:12px;
+  padding:15px 16px 12px;margin-bottom:11px;
+  background-image:repeating-linear-gradient(180deg,transparent 0,transparent 27px,var(--sage-soft) 28px);
+  background-position:0 12px;
+}
+.letter p{font-family:var(--serif);font-size:14px;line-height:28px;color:var(--ink);min-height:56px;}
+.letter .acts{display:flex;justify-content:space-between;align-items:center;margin-top:8px;}
+.iconbtn{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink-soft);background:none;border:none;font-family:var(--sans);}
+.iconbtn svg{width:15px;height:15px;}
+.iconbtn.saved{color:var(--honey-deep);}
+/* 礼物行 */
+.gift{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:9px;display:flex;gap:11px;align-items:center;}
+.gift .g-stamp{width:38px;height:38px;flex:none;border-radius:9px;background:var(--honey-wash);display:flex;align-items:center;justify-content:center;}
+.gift .g-stamp svg{width:19px;height:19px;}
+.gift .g-mid{flex:1;min-width:0;}
+.gift .g-name{font-family:var(--serif);font-size:14px;font-weight:600;}
+.gift .g-why{font-size:11.5px;color:var(--ink-soft);line-height:1.6;margin-top:2px;}
+.gift .g-go{flex:none;font-size:12px;color:var(--pine);border:1px solid var(--sage);border-radius:999px;padding:6px 13px;background:var(--paper);}
+/* 电子贺卡（明信片） */
+.postcard{border-radius:14px;overflow:hidden;border:1px solid var(--line);position:relative;}
+.pc-art{position:relative;padding:20px 20px 18px;min-height:196px;}
+.pc-art .pc-stamp{
+  position:absolute;top:14px;right:14px;width:52px;height:62px;border-radius:5px;
+  border:1.5px dashed rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.14);
+}
+.pc-art .pc-circle{
+  position:absolute;top:12px;left:14px;width:42px;height:42px;border-radius:50%;
+  border:1.5px solid rgba(255,255,255,.75);display:flex;align-items:center;justify-content:center;
+  font-family:var(--num);font-size:11px;color:rgba(255,255,255,.92);
+}
+.pc-art .to{font-family:var(--hand);font-size:21px;color:#fff;margin-top:40px;text-shadow:0 1px 8px rgba(20,40,30,.35);}
+.pc-art .wish{
+  font-family:var(--hand);font-size:23px;line-height:1.75;color:#fff;margin-top:6px;
+  text-shadow:0 1px 8px rgba(20,40,30,.35);max-width:300px;
+}
+.pc-art .sign{font-family:var(--hand);font-size:17px;color:rgba(255,255,255,.94);text-align:right;margin-top:10px;text-shadow:0 1px 6px rgba(20,40,30,.3);}
+.pc-art.tpl-mountain{background:linear-gradient(180deg,#DCEAE2 0%,#EEF5F0 62%,#DCE7DF 100%);color:var(--pine-deep);}
+.pc-art.tpl-mountain .to,.pc-art.tpl-mountain .wish,.pc-art.tpl-mountain .sign{color:var(--pine-deep);text-shadow:none;}
+.pc-art.tpl-mountain .pc-stamp{border-color:rgba(53,100,83,.6);background:rgba(255,255,255,.4);}
+.pc-art.tpl-mountain .pc-circle{border-color:rgba(53,100,83,.55);color:var(--pine-deep);}
+.pc-foot{background:var(--paper);padding:11px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.pc-foot .switcher{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink-soft);}
+.pc-foot .switcher button{width:26px;height:26px;border-radius:50%;border:1px solid var(--sage);background:var(--paper);color:var(--pine);font-size:14px;line-height:1;}
+.pc-foot .switcher b{font-family:var(--num);color:var(--ink);font-weight:600;}
+.tpl-pick{display:flex;gap:7px;}
+.tpl-dot{width:24px;height:24px;border-radius:7px;border:2px solid transparent;}
+.tpl-dot.on{border-color:var(--honey);}
+.tpl-dot.m{background:linear-gradient(135deg,#CFE0D5,#9CBCAE);}
+.tpl-dot.n{background:linear-gradient(135deg,#2E544C,#16322D);}
+.tpl-dot.w{background:linear-gradient(135deg,#F2DCAF,#D89A45);}
+/* 设置行 */
+.setrow{display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--sage-soft);}
+.setrow:last-child{border-bottom:none;}
+.setrow .s-mid{flex:1;}
+.setrow .s-name{font-size:14px;}
+.setrow .s-sub{font-size:11px;color:var(--ink-faint);margin-top:2px;}
+.stepper{display:flex;align-items:center;gap:11px;}
+.stepper button{width:28px;height:28px;border-radius:50%;border:1px solid var(--sage);background:var(--paper);color:var(--pine);font-size:16px;}
+.stepper b{font-family:var(--num);font-size:22px;font-weight:600;min-width:22px;text-align:center;}
+.stepper span{font-size:11px;color:var(--ink-faint);}
+.cardpanel{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:4px 14px;margin-bottom:14px;}
+.cardpanel.title-panel{padding:13px 14px 8px;}
+.panel-name{font-size:12.5px;color:var(--ink-faint);letter-spacing:.1em;margin:10px 2px 8px;}
+/* 弹层 */
+.overlay{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;justify-content:flex-end;}
+.overlay .mask{position:absolute;inset:0;background:rgba(24,38,31,.42);}
+.sheet{position:relative;background:var(--paper);border-radius:22px 22px 0 0;padding:22px 22px 26px;margin:0 10px 10px;}
+.sheet .grip{width:38px;height:4px;border-radius:2px;background:var(--sage);margin:0 auto 16px;}
+.sheet h3{font-family:var(--serif);font-size:18px;font-weight:600;margin-bottom:9px;}
+.sheet p{font-size:13px;line-height:1.9;color:var(--ink-soft);}
+.sheet .sbtns{display:flex;flex-direction:column;gap:10px;margin-top:18px;}
+.sheet .sbtns .row2{display:flex;gap:10px;}
+.sheet .sbtns .row2 .btn{flex:1;}
+/* 顶部通知条 */
+.notif{
+  position:absolute;z-index:20;top:48px;left:12px;right:12px;
+  background:rgba(251,252,248,.97);border:1px solid var(--line);border-radius:15px;
+  padding:11px 14px;display:flex;gap:10px;box-shadow:0 10px 26px rgba(24,38,31,.18);
+}
+.notif .n-ic{width:32px;height:32px;border-radius:9px;background:var(--pine);flex:none;display:flex;align-items:center;justify-content:center;}
+.notif .n-t{font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;}
+.notif .n-t span{font-weight:400;color:var(--ink-faint);font-size:11px;}
+.notif .n-b{font-size:11.5px;color:var(--ink-soft);margin-top:2px;line-height:1.5;}
+/* 简单列表行（选人/清单/设置入口） */
+.pickrow{display:flex;align-items:center;gap:12px;background:var(--paper);border:1px solid var(--line);border-radius:13px;padding:13px 14px;margin-bottom:10px;}
+.ava{
+  width:42px;height:42px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+  font-family:var(--serif);font-size:17px;color:var(--pine-deep);background:var(--sage-soft);
+}
+.ava.warm{background:var(--honey-wash);color:var(--honey-deep);}
+.ava.night{background:#DCE7E3;color:var(--night);}
+.pickrow .pm{flex:1;}
+.pickrow .pn{font-size:14.5px;font-family:var(--serif);font-weight:600;}
+.pickrow .ps{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+.chev{color:var(--ink-faint);font-size:18px;font-family:var(--num);}
+/* 收藏缩略 */
+.fav-card-thumb{width:58px;height:42px;border-radius:7px;flex:none;border:1px solid var(--line);overflow:hidden;position:relative;background:linear-gradient(135deg,#CFE0D5,#8FB3A3);}
+.fav-card-thumb.n{background:linear-gradient(135deg,#2E544C,#16322D);}
+.fav-card-thumb.w{background:linear-gradient(135deg,#F2DCAF,#D89A45);}
+.fav-card-thumb::after{content:"";position:absolute;top:5px;right:5px;width:11px;height:13px;border:1px dashed rgba(255,255,255,.8);border-radius:2px;}
+.typetag{font-size:10.5px;border-radius:6px;padding:2px 8px;font-weight:500;}
+.typetag.bless{background:#E4EEE8;color:var(--pine-deep);}
+.typetag.gift{background:var(--honey-wash);color:var(--honey-deep);}
+.typetag.card{background:#E3ECE8;color:#3D6A5E;}
+/* 首次引导 */
+.onb{padding:70px 30px 0;text-align:center;}
+.onb .env{margin:0 auto 34px;width:188px;height:150px;position:relative;}
+.onb h2{font-family:var(--serif);font-size:25px;font-weight:600;line-height:1.6;}
+.onb p{font-size:13.5px;color:var(--ink-soft);line-height:2;margin-top:14px;}
+.onb .btn{margin-top:36px;}
+/* 资料表单 */
+.formscroll{padding:4px 18px 18px;overflow:hidden;}
+.dual{display:flex;gap:10px;}
+.dual .field{flex:1;}
+.addrow{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+.addrow .input{flex:1;}
+.traitbox{background:var(--paper-dim);border:1px dashed var(--sage);border-radius:11px;padding:10px 12px;}
+.trait-line{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 0;}
+.trait-line .x{color:var(--ink-faint);font-size:14px;}
+.trait-add{font-size:12px;color:var(--pine);margin-top:4px;display:inline-block;}
+/* 服务说明 / 登录 */
+.doc{font-size:13px;line-height:2;color:var(--ink-soft);}
+.doc h4{font-family:var(--serif);color:var(--ink);font-size:14px;margin:14px 0 4px;}
+.login-note{text-align:center;font-size:11.5px;color:var(--ink-faint);line-height:1.8;margin-top:14px;}
+/* 回顾 */
+.recap{background:var(--paper-dim);border:1px dashed var(--sage);border-radius:12px;padding:15px 16px;text-align:center;}
+.recap .r-hand{font-family:var(--hand);font-size:19px;color:var(--pine-deep);}
+.recap p{font-size:11.5px;color:var(--ink-faint);margin-top:4px;}
+.sentrow{display:flex;gap:8px;margin-top:12px;}
+.sentchip{flex:1;border:1px solid var(--sage);border-radius:10px;padding:9px 4px;text-align:center;font-size:11.5px;color:var(--ink-soft);background:var(--paper);}
+.sentchip.on{border-color:var(--honey);background:#FCF6EA;color:var(--honey-deep);}
+.sentchip.on::before{content:"✓ ";font-family:var(--sans);}
+/* 状态变体注记 */
+.state-variants{max-width:1400px;margin:30px auto 0;display:flex;flex-wrap:wrap;gap:12px;justify-content:center;}
+.state-variants .sv{background:var(--paper);border:1px dashed var(--sage);border-radius:11px;padding:10px 15px;font-size:12px;color:var(--ink-soft);max-width:320px;line-height:1.7;}
+.state-variants .sv b{color:var(--pine-deep);}
+.foot-note{text-align:center;margin-top:70px;font-size:12px;color:var(--ink-soft);line-height:2;}
+</style>
+</head>
+<body>
+<div class="gallery">
+
+  <div class="gallery-head">
+    <h1>AI 心意管家 · 第一版原型图</h1>
+    <p>像在信箱里取出一封手写明信片——天青色的清晨，松墨色的字，蜜蜡色的邮戳。<br>
+    日子到之前，祝福、礼物和贺卡已经替你备好在那里。</p>
+    <div class="tokens">
+      <div class="token"><span class="swatch" style="background:#E9F0EB"></span>天青底 <b>#E9F0EB</b></div>
+      <div class="token"><span class="swatch" style="background:#FBFCF8"></span>信纸白 <b>#FBFCF8</b></div>
+      <div class="token"><span class="swatch" style="background:#26332B"></span>松墨 <b>#26332B</b></div>
+      <div class="token"><span class="swatch" style="background:#356453"></span>松绿 <b>#356453</b></div>
+      <div class="token"><span class="swatch" style="background:#C98F3D"></span>蜜蜡 <b>#C98F3D</b></div>
+      <div class="token"><span class="swatch" style="background:#BFD0C5"></span>苔绿 <b>#BFD0C5</b></div>
+      <div class="token" style="flex-direction:column;align-items:flex-start;gap:2px;">
+        <span style="font-family:var(--serif);font-size:15px;color:var(--ink);">宋体标题 · 正文黑体</span>
+        <span style="font-family:var(--hand);font-size:18px;color:var(--pine-deep);">贺卡祝福用手写体</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 流程一：提醒到达 ============ -->
+  <div class="flow"><span class="seq">壹</span><h2>提醒到达</h2><span>推送主动来 · 单个日子直达详情，多个日子进当日清单</span></div>
+  <div class="frames">
+
+    <!-- 当日清单（含合并推送） -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons">
+          <svg width="15" height="11" viewBox="0 0 15 11"><path d="M1 6c4-4.5 9-4.5 13 0" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="7.5" cy="8.5" r="1.6" fill="currentColor"/></svg>
+          <svg width="18" height="11" viewBox="0 0 22 11"><rect x="1" y="1.5" width="17" height="8" rx="2" stroke="currentColor" fill="none" stroke-width="1.2"/><rect x="2.6" y="3.1" width="12" height="4.8" rx="1" fill="currentColor"/><rect x="19.5" y="4" width="2" height="3" rx="1" fill="currentColor"/></svg>
+        </span></div>
+        <div class="screen">
+          <div class="notif">
+            <div class="n-ic">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><path d="M4 6.5 12 12l8-5.5M4 6.5h16v11H4z"/></svg>
+            </div>
+            <div style="flex:1">
+              <div class="n-t">心意管家 <span>现在</span></div>
+              <div class="n-b">今天有 2 个日子要惦记：妈妈的生日、老王的乔迁，都还有 3 天</div>
+            </div>
+          </div>
+          <div class="scroll" style="padding-top:96px">
+            <div class="apphdr">
+              <div>
+                <div class="greet">今天该准备的心意</div>
+                <div class="sub">10 月 31 日 · 星期六 · 2 个日子</div>
+              </div>
+            </div>
+            <div class="pickrow" style="padding:15px 14px">
+              <div class="stamp sm">生</div>
+              <div class="pm">
+                <div class="pn">妈妈 <span class="reltag">家人</span></div>
+                <div class="ps">生日 · 还有 3 天 · 祝福与贺卡已备好</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="pickrow" style="padding:15px 14px">
+              <div class="stamp sm tone-warm">乔</div>
+              <div class="pm">
+                <div class="pn">老王 <span class="reltag">挚友</span></div>
+                <div class="ps">乔迁 · 还有 3 天 · 祝福与贺卡已备好</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="recap" style="margin-top:18px;text-align:left">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div class="postmark" style="width:42px;height:42px;flex:none"><b style="font-size:14px">1</b><em>POST</em></div>
+                <p style="font-size:12px;color:var(--ink-soft);margin:0;line-height:1.7">同一天多个日子合并为一条推送；两个日子的祝福、礼物与贺卡都已按当年快照备好，点进去即可直接用。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>当日清单页</b>　合并推送点击后进入；清单内每条可直达对应日子的心意详情。上方为 Android 通知条示意（场景示例数据）。</div>
+    </div>
+  </div>
+
+  <!-- ============ 流程二：首页与人员 ============ -->
+  <div class="flow"><span class="seq">贰</span><h2>首页与人员档案</h2><span>没档案时有引导；首页是按临近程度排好的一沓明信片</span></div>
+  <div class="frames">
+
+    <!-- 首次引导 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="onb">
+            <div class="env">
+              <svg viewBox="0 0 188 150" width="188" height="150">
+                <rect x="14" y="30" width="160" height="98" rx="10" fill="#FBFCF8" stroke="#BFD0C5" stroke-width="1.5"/>
+                <path d="M14 40 94 96l80-56" fill="none" stroke="#C98F3D" stroke-width="1.6" stroke-dasharray="5 5"/>
+                <rect x="128" y="42" width="34" height="40" rx="4" fill="#F2E6CE" stroke="#C98F3D" stroke-width="1.4" stroke-dasharray="4 3"/>
+                <path d="M145 52c-5 6-9 9-9 14 0 4 4 7 9 7s9-3 9-7c0-5-4-8-9-14z" fill="#356453"/>
+                <path d="M52 88h56M52 100h40" stroke="#BFD0C5" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="40" cy="105" r="13" fill="none" stroke="#356453" stroke-width="1.3"/>
+                <text x="40" y="109" text-anchor="middle" font-family="Cormorant Garamond,serif" font-size="9" fill="#356453">9:00</text>
+              </svg>
+            </div>
+            <h2>把惦记的人，<br>先记下来</h2>
+            <p>提前三天告诉你日子近了，<br>祝福、礼物和贺卡也一并备好。<br>日子到了，心意也到。</p>
+            <a class="btn btn-pine btn-block">添加第一位惦记的人</a>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>添加引导（首次）</b>　没有任何档案时首次进入 App 出现；完成第一位人员添加后直接进入正常首页，之后不再出现。</div>
+    </div>
+
+    <!-- 首页 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons">
+          <svg width="15" height="11" viewBox="0 0 15 11"><path d="M1 6c4-4.5 9-4.5 13 0" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="7.5" cy="8.5" r="1.6" fill="currentColor"/></svg>
+          <svg width="18" height="11" viewBox="0 0 22 11"><rect x="1" y="1.5" width="17" height="8" rx="2" stroke="currentColor" fill="none" stroke-width="1.2"/><rect x="2.6" y="3.1" width="12" height="4.8" rx="1" fill="currentColor"/><rect x="19.5" y="4" width="2" height="3" rx="1" fill="currentColor"/></svg>
+        </span></div>
+        <div class="screen">
+          <div class="scroll">
+            <div class="apphdr">
+              <div>
+                <div class="greet">最近要惦记的人</div>
+                <div class="sub">10 月 28 日 · 按临近程度由近到远</div>
+              </div>
+              <div style="display:flex;gap:14px;align-items:center;">
+                <div class="postmark"><b>28</b><em>OCT</em></div>
+              </div>
+            </div>
+            <button class="linkbtn" style="margin:0 2px 12px">人员添加与管理 ›</button>
+
+            <div class="pc-row today">
+              <span class="honey-dot"></span>
+              <div class="stamp sm tone-warm">生</div>
+              <div class="mid">
+                <div class="who">陈叔 <span class="reltag">其他</span></div>
+                <div class="what">生日 · 就是今天</div>
+              </div>
+              <div class="days"><b>今天</b></div>
+            </div>
+
+            <div class="pc-row">
+              <div class="stamp">生</div>
+              <div class="mid">
+                <div class="who">妈妈 <span class="reltag">家人</span></div>
+                <div class="what">生日 · 爱养花，今年刚退休</div>
+              </div>
+              <div class="days"><b>3</b><span>天后</span></div>
+            </div>
+
+            <div class="pc-row">
+              <div class="stamp tone-warm">乔</div>
+              <div class="mid">
+                <div class="who">老王 <span class="reltag">挚友</span></div>
+                <div class="what">乔迁 · 喜欢手冲咖啡，养了只橘猫</div>
+              </div>
+              <div class="days"><b>12</b><span>天后</span></div>
+            </div>
+
+            <div class="pc-row">
+              <div class="stamp tone-night">恩</div>
+              <div class="mid">
+                <div class="who">感恩节 <span class="reltag">通用节日</span></div>
+                <div class="what">可选一位人查看定制心意，也可看通用版</div>
+              </div>
+              <div class="days"><b>29</b><span>天后</span></div>
+            </div>
+
+            <div class="pc-row">
+              <div class="stamp">生</div>
+              <div class="mid">
+                <div class="who">张伟 <span class="reltag">客户</span></div>
+                <div class="what">生日 · 重名时以关系标签区分</div>
+              </div>
+              <div class="days"><b>34</b><span>天后</span></div>
+            </div>
+
+            <div class="pc-row">
+              <div class="stamp tone-night">圣</div>
+              <div class="mid">
+                <div class="who">圣诞节 <span class="reltag">通用节日</span></div>
+                <div class="what">已关闭提醒，仍可点开查看节日心意</div>
+              </div>
+              <div class="days"><b>58</b><span>天后</span></div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>首页<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>收藏<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>设置<span class="tab-dot"></span></a>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>首页</b>　三个标签页之一。列出生日、各纪念日与六个内置节日；每条标明对象、日子名称、剩余天数。日子当天用蜜蜡色圆点与角标提示（spec 所称"红点"在本视觉体系中落为蜜蜡色）。</div>
+    </div>
+
+    <!-- 人员列表 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll">
+            <div class="apphdr">
+              <div>
+                <div class="greet" style="font-size:21px">‹　惦记的人</div>
+                <div class="sub">共 4 位 · 允许重名，以关系标签区分</div>
+              </div>
+            </div>
+            <a class="btn btn-ghost btn-block btn-sm" style="margin-bottom:14px">＋ 添加一位人</a>
+            <div class="pickrow"><div class="ava">妈</div><div class="pm"><div class="pn">妈妈 <span class="reltag">家人</span></div><div class="ps">生日 10 月 31 日 · 1 个纪念日 · 2 条特征</div></div><span class="chev">›</span></div>
+            <div class="pickrow"><div class="ava warm">王</div><div class="pm"><div class="pn">老王 <span class="reltag">挚友</span></div><div class="ps">生日 5 月 9 日 · 乔迁等 2 个纪念日</div></div><span class="chev">›</span></div>
+            <div class="pickrow"><div class="ava night">张</div><div class="pm"><div class="pn">张伟 <span class="reltag">客户</span></div><div class="ps">生日 12 月 1 日 · 提前 5 天单独提醒</div></div><span class="chev">›</span></div>
+            <div class="pickrow"><div class="ava">陈</div><div class="pm"><div class="pn">陈叔 <span class="reltag">其他</span></div><div class="ps">生日 10 月 28 日 · 未填写特征</div></div><span class="chev">›</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>人员列表</b>　从首页"人员添加与管理"进入。点入查看/修改；删除在编辑页内，带二次确认。</div>
+    </div>
+
+    <!-- 添加/编辑人员 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="formscroll">
+            <div class="apphdr" style="padding-bottom:6px">
+              <div class="greet" style="font-size:21px">‹　编辑人员</div>
+              <button class="linkbtn" style="color:#A35B3B">删除</button>
+            </div>
+
+            <div class="field"><label>姓名 <i>必填</i></label><input class="input" value="妈妈"></div>
+            <div class="field">
+              <label>与自己的关系 <i>必填</i></label>
+              <div class="chips">
+                <span class="chip on">家人</span><span class="chip">挚友</span><span class="chip">客户</span><span class="chip">其他</span>
+              </div>
+            </div>
+            <div class="dual">
+              <div class="field"><label>生日（月 / 日） <i>必填</i></label><input class="input" value="10 月 31 日"></div>
+              <div class="field"><label>出生年份（选填）</label><input class="input" placeholder="仅内部理解人生阶段"></div>
+            </div>
+            <div class="field">
+              <label>纪念日（可添加多个，名称可自定义）</label>
+              <div class="addrow"><input class="input mini" value="乔迁" style="flex:1.3"><input class="input mini" value="3 月 12 日" style="flex:1.4"><input class="input mini" placeholder="起始年份选填" style="flex:1"></div>
+              <div class="addrow"><input class="input mini" placeholder="如：领证日" style="flex:1.3"><input class="input mini" placeholder="月 / 日" style="flex:1.4"><input class="input mini" placeholder="起始年份" style="flex:1"></div>
+              <span class="trait-add">＋ 再加一个纪念日</span>
+            </div>
+            <div class="field">
+              <label>特征描述（选填，最多 5 条，单条不超过 30 字，也可以一条不写）</label>
+              <div class="traitbox">
+                <div class="trait-line">爱养花，今年刚退休 <span class="x">✕</span></div>
+                <div class="trait-line">跳广场舞时认识了好多朋友 <span class="x">✕</span></div>
+                <span class="trait-add">＋ 添加一条特征（还可加 3 条）</span>
+              </div>
+            </div>
+            <div class="dual">
+              <div class="field"><label>你怎么称呼 TA（选填）</label><input class="input" value="妈妈" placeholder="用于贺卡抬头"></div>
+              <div class="field"><label>你的自称（选填）</label><input class="input" value="儿子小明" placeholder="用于祝福落款"></div>
+            </div>
+            <a class="btn btn-pine btn-block" style="margin-top:6px">保存</a>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>添加 / 编辑人员</b>　仅姓名与生日必填，其余可空；出生年份仅用于内部理解，默认不出现具体年龄；起始年份用于周年数。</div>
+    </div>
+  </div>
+
+  <!-- 删除确认（叠加示意） -->
+  <div class="flow"><span class="seq">叁</span><h2>删除前的告知</h2><span>关键破坏性操作，先把后果说清楚</span></div>
+  <div class="frames">
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen" style="background:var(--mist);">
+          <div class="formscroll" style="filter:saturate(.7)">
+            <div class="apphdr"><div class="greet" style="font-size:21px">‹　编辑人员</div></div>
+            <div class="field"><label>姓名</label><input class="input" value="妈妈"></div>
+            <div class="field"><label>生日</label><input class="input" value="10 月 31 日"></div>
+          </div>
+          <div class="overlay">
+            <div class="mask"></div>
+            <div class="sheet">
+              <div class="grip"></div>
+              <h3>删除「妈妈」的档案？</h3>
+              <p>TA 的档案、相关日子与提醒都会删除；为 TA 收藏的内容和往年心意记录，也会一并消失，无法恢复。</p>
+              <div class="sbtns">
+                <a class="btn btn-ink btn-block">确认删除</a>
+                <a class="btn btn-ghost btn-block">再想想</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>删除二次确认</b>（spec 第 2 条）　明确告知收藏与往年记录一并删除；确认后该人不再出现在任何列表、推送、收藏夹或回顾中。</div>
+    </div>
+  </div>
+
+  <!-- ============ 流程四：三样心意 ============ -->
+  <div class="flow"><span class="seq">肆</span><h2>三样心意 · 祝福与礼物</h2><span>点开即齐全，生成一次、当年固定</span></div>
+  <div class="frames">
+
+    <!-- 心意详情 A -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll" style="padding-bottom:8px">
+            <div class="apphdr" style="padding-bottom:4px">
+              <div>
+                <div class="greet" style="font-size:22px">‹　妈妈的生日</div>
+                <div class="sub">2026 年 10 月 31 日 · 还有 3 天 · 当年快照</div>
+              </div>
+              <div class="postmark"><b>3</b><em>DAYS</em></div>
+            </div>
+
+            <div class="secttl">祝福 <span class="en">3 letters</span><button class="linkbtn" style="margin-left:auto">重新生成</button></div>
+
+            <div class="letter">
+              <p>妈，生日快乐。退休后的第一个生日，愿你每天都有浇花的闲情；阳台上的月季开了，你也该多为自己开开。</p>
+              <div class="acts">
+                <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>复制</button>
+                <button class="iconbtn saved"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>已收藏</button>
+              </div>
+            </div>
+            <div class="letter">
+              <p>这一年你终于把时间还给了自己：花越养越好，日子也越过越松快。生日快乐，我常回家。</p>
+              <div class="acts">
+                <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>复制</button>
+                <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>收藏</button>
+              </div>
+            </div>
+            <div class="letter">
+              <p>生日快乐妈。不用惦记我有没有吃饭，我只惦记你今天有没有开心。——落款：儿子小明</p>
+              <div class="acts">
+                <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>复制</button>
+                <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>收藏</button>
+              </div>
+            </div>
+
+            <div class="secttl">礼物建议 <span class="en">5 ideas</span><button class="linkbtn" style="margin-left:auto">重新生成</button></div>
+
+            <div class="gift">
+              <div class="g-stamp"><svg viewBox="0 0 24 24" fill="none" stroke="#A9732C" stroke-width="1.6"><path d="M12 8v13M5 11h14v10H5zM12 8S9 3 6 5s2 3 6 3zm0 0s3-5 6-3-2 3-6 3z"/></svg></div>
+              <div class="g-mid"><div class="g-name">轻便园艺工具套装</div><div class="g-why">退休后天天伺候阳台的花，轻便款不伤手腕</div></div>
+              <button class="g-go">去看看</button>
+            </div>
+            <div class="gift">
+              <div class="g-stamp"><svg viewBox="0 0 24 24" fill="none" stroke="#A9732C" stroke-width="1.6"><path d="M12 3c3 4 5 6.5 5 9a5 5 0 0 1-10 0c0-2.5 2-5 5-9z"/></svg></div>
+              <div class="g-mid"><div class="g-name">精品月季盆栽（带花苞）</div><div class="g-why">和她阳台上的月季凑成一片，到货就能赏</div></div>
+              <button class="g-go">去看看</button>
+            </div>
+            <div class="gift">
+              <div class="g-stamp"><svg viewBox="0 0 24 24" fill="none" stroke="#A9732C" stroke-width="1.6"><path d="M6 8h12l-1.5 12h-9zM10 8V5a2 2 0 0 1 4 0v3"/></svg></div>
+              <div class="g-mid"><div class="g-name">手工陶瓷花盆 · 一套三只</div><div class="g-why">她分株移栽的小苗，正好有地方安家</div></div>
+              <button class="g-go">去看看</button>
+            </div>
+            <div style="text-align:center;margin:2px 0 4px"><button class="linkbtn">展开其余 2 个建议</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>心意详情 · 祝福与礼物</b>　默认三条祝福（条数可在设置调整，仅对新生效）；礼物不少于五个，每条有"为什么适合 TA"与「去看看」。信纸横线承载祝福文案。</div>
+    </div>
+
+    <!-- AI 告知弹层 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll" style="filter:saturate(.75)">
+            <div class="apphdr"><div><div class="greet" style="font-size:22px">‹　妈妈的生日</div><div class="sub">2026 年 10 月 31 日 · 还有 3 天</div></div></div>
+            <div class="secttl">祝福 <span class="en">3 letters</span></div>
+            <div class="recap" style="padding:34px 16px">
+              <div class="r-hand">还没有拟好祝福</div>
+              <p>同意后，这里会出现三条为妈妈拟的祝福</p>
+            </div>
+          </div>
+          <div class="overlay">
+            <div class="mask"></div>
+            <div class="sheet">
+              <div class="grip"></div>
+              <h3>用 AI 帮你拟这份心意？</h3>
+              <p>生成祝福与礼物建议时，这位联系人的<b style="color:var(--ink)">姓名与特征描述</b>会发送到 AI 服务处理，仅用于生成贴合 TA 的内容。</p>
+              <p style="margin-top:8px">你可以随时在「设置 · 服务说明」查看详情。该告知只出现这一次。</p>
+              <div class="sbtns">
+                <a class="btn btn-pine btn-block">同意并生成</a>
+                <a class="btn btn-ghost btn-block">暂不同意</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>首次 AI 生成告知</b>（spec 第 13 条）　未同意前不发送任何信息、不生成内容；「暂不同意」后停留在详情并保留生成入口，再次点击可重新看到告知。</div>
+    </div>
+  </div>
+
+  <!-- 状态变体小注记 -->
+  <div class="state-variants">
+    <div class="sv"><b>无网络且尚未生成：</b>祝福区与礼物区显示"需要网络"，并提供「手动重试」按钮；已生成的快照不受影响，可离线完整查看。</div>
+    <div class="sv"><b>连续 3 次生成失败：</b>祝福区给出一组不针对个人的通用兜底文案；网络恢复后可「重新生成」覆盖兜底内容。</div>
+    <div class="sv"><b>一条特征都没填：</b>仍正常生成"通用但真诚"版本，详情提示"补充 TA 的特征可让祝福更贴合"，并提供前往编辑档案的入口。</div>
+  </div>
+
+  <div class="flow" style="margin-top:56px"><span class="seq">伍</span><h2>三样心意 · 电子贺卡与往年回顾</h2><span>进入详情即自动组合好，无单独「生成」按钮</span></div>
+  <div class="frames">
+
+    <!-- 心意详情 B：贺卡 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll" style="padding-bottom:8px">
+            <div class="apphdr" style="padding-bottom:6px">
+              <div>
+                <div class="greet" style="font-size:22px">‹　妈妈的生日</div>
+                <div class="sub">贺卡已按模板与祝福自动摆好</div>
+              </div>
+            </div>
+
+            <div class="secttl">电子贺卡 <span class="en">postcard</span></div>
+
+            <div class="postcard">
+              <div class="pc-art tpl-mountain">
+                <svg viewBox="0 0 320 196" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;opacity:.9">
+                  <circle cx="262" cy="44" r="17" fill="#EFCB8E" opacity=".8"/>
+                  <path d="M0 150 Q60 108 118 138 T230 132 T320 142 V196 H0 Z" fill="#9CBCAE" opacity=".55"/>
+                  <path d="M0 168 Q70 132 140 158 T300 156 V196 H0 Z" fill="#356453" opacity=".38"/>
+                </svg>
+                <div class="pc-circle">10·31</div>
+                <div class="pc-stamp">
+                  <svg width="26" height="30" viewBox="0 0 26 30"><path d="M13 4C9 10 5 13 5 18a8 8 0 0 0 16 0c0-5-4-8-8-14z" fill="#356453"/></svg>
+                </div>
+                <div class="to">妈妈：</div>
+                <div class="wish">退休后的第一个生日，<br>愿你每天都有浇花的闲情。</div>
+                <div class="sign">儿子小明</div>
+              </div>
+              <div class="pc-foot">
+                <div class="switcher">
+                  <button>‹</button><span><b>1</b> / 3</span><button>›</button>
+                  <span style="border-left:1px solid var(--line);height:16px"></span>
+                  <button style="width:auto;height:26px;padding:0 11px;border-radius:999px;font-size:11px">点按文字可编辑</button>
+                </div>
+                <div class="tpl-pick">
+                  <span class="tpl-dot m on"></span><span class="tpl-dot n"></span><span class="tpl-dot w"></span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;margin:11px 0 4px">
+              <a class="btn btn-pine btn-sm" style="flex:1">保存到手机</a>
+              <a class="btn btn-ghost btn-sm" style="flex:1">经系统分享面板发送</a>
+            </div>
+            <div class="hint" style="text-align:center">切换模板不丢祝福；收件人无需安装本 App，即可查看完整贺卡。</div>
+
+            <div class="secttl">往年心意 <span class="en">through the years</span></div>
+            <div class="recap">
+              <div class="r-hand">今年，是第一次给妈妈庆生</div>
+              <p>明年起，这里会按年份倒序记下送出过的祝福、礼物与贺卡</p>
+              <div class="sentrow">
+                <span class="sentchip on">祝福已送出</span>
+                <span class="sentchip">标记礼物</span>
+                <span class="sentchip">标记贺卡</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>心意详情 · 贺卡与回顾</b>　三套风格明显不同的模板：远山（天青）/ 月夜（深青）/ 暖阳（蜜蜡）。称呼取"你怎么称呼 TA"，未填用姓名；无自称时落款整块不显示。下方为「今年已送出」标记与"今年是第一次"空态。</div>
+    </div>
+
+    <!-- 节日选人 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll">
+            <div class="apphdr">
+              <div>
+                <div class="greet" style="font-size:22px">‹　感恩节</div>
+                <div class="sub">11 月 26 日 · 十一月第四个星期四</div>
+              </div>
+              <div class="stamp sm tone-night" style="width:46px;height:56px;font-size:20px">恩</div>
+            </div>
+
+            <div class="pickrow" style="border-style:dashed;border-color:var(--honey);background:#FDF9F1">
+              <div class="ava warm">通</div>
+              <div class="pm">
+                <div class="pn">看通用版（不选人）</div>
+                <div class="ps">含通用祝福与通用贺卡，不含礼物建议</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="panel-name" style="margin:14px 4px 8px">或选一位惦记的人，内容会同时体现节日与 TA 的特征</div>
+            <div class="pickrow"><div class="ava">妈</div><div class="pm"><div class="pn">妈妈 <span class="reltag">家人</span></div><div class="ps">爱养花，今年刚退休</div></div><span class="chev">›</span></div>
+            <div class="pickrow"><div class="ava warm">王</div><div class="pm"><div class="pn">老王 <span class="reltag">挚友</span></div><div class="ps">喜欢手冲咖啡，养了只橘猫</div></div><span class="chev">›</span></div>
+            <div class="pickrow"><div class="ava night">张</div><div class="pm"><div class="pn">张伟 <span class="reltag">客户</span></div><div class="ps">语气会更正式得体</div></div><span class="chev">›</span></div>
+            <div class="pickrow"><div class="ava">陈</div><div class="pm"><div class="pn">陈叔 <span class="reltag">其他</span></div><div class="ps">未填特征也能生成"通用但真诚"版本</div></div><span class="chev">›</span></div>
+            <div class="hint" style="margin-top:8px">通用版可直接收藏，对象标注为"通用（未指定人）"；标记「已送出」前需先选择一位已录入的人。</div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>节日选人页</b>　首页节日条目与节日推送进入。可不选人直接看通用版；未录入任何人时也能进通用版，不出现空白页。</div>
+    </div>
+  </div>
+
+  <!-- ============ 流程六：收藏 / 设置 / 账号 ============ -->
+  <div class="flow"><span class="seq">陆</span><h2>收藏、设置与账号</h2><span>好心意逐年沉淀；登录可选，未登录先用本机</span></div>
+  <div class="frames">
+
+    <!-- 收藏 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll">
+            <div class="apphdr">
+              <div><div class="greet">收藏夹</div><div class="sub">保存的是收藏那一刻的完整内容，可离线再用</div></div>
+            </div>
+            <div class="chips" style="margin-bottom:14px">
+              <span class="chip on">全部</span><span class="chip">祝福</span><span class="chip">礼物</span><span class="chip">贺卡</span>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;margin:0 2px 8px"><span class="typetag bless">祝福</span><span class="hint" style="margin:0">为 妈妈 · 生日 收藏</span></div>
+            <div class="letter" style="margin-bottom:14px">
+              <p>这一年你终于把时间还给了自己：花越养越好，日子也越过越松快。生日快乐，我常回家。</p>
+              <div class="acts"><button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>复制</button><button class="iconbtn saved"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>取消收藏</button></div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;margin:0 2px 8px"><span class="typetag gift">礼物</span><span class="hint" style="margin:0">为 妈妈 · 生日 收藏</span></div>
+            <div class="gift" style="margin-bottom:14px">
+              <div class="g-stamp"><svg viewBox="0 0 24 24" fill="none" stroke="#A9732C" stroke-width="1.6"><path d="M6 8h12l-1.5 12h-9zM10 8V5a2 2 0 0 1 4 0v3"/></svg></div>
+              <div class="g-mid"><div class="g-name">手工陶瓷花盆 · 一套三只</div><div class="g-why">名称、理由与搜索词完整保存</div></div>
+              <button class="g-go">去看看</button>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;margin:0 2px 8px"><span class="typetag card">贺卡</span><span class="hint" style="margin:0">通用（未指定人）· 母亲节</span></div>
+            <div class="pickrow" style="padding:11px 14px">
+              <div class="fav-card-thumb n"></div>
+              <div class="pm"><div class="pn" style="font-size:13.5px">月夜 · 通用版贺卡</div><div class="ps">模板与图文完整保存，不受重新生成影响</div></div>
+              <button class="g-go">导出图片</button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>首页<span class="tab-dot"></span></a>
+            <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>收藏<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>设置<span class="tab-dot"></span></a>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>收藏</b>　祝福 / 礼物 / 贺卡三类清晰区分，标明为谁、为什么日子收藏；祝福复制、礼物「去看看」、贺卡导出图片。</div>
+    </div>
+
+    <!-- 设置 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll">
+            <div class="apphdr"><div><div class="greet">设置</div></div></div>
+
+            <div class="panel-name">提醒</div>
+            <div class="cardpanel">
+              <div class="setrow">
+                <div class="s-mid"><div class="s-name">全局默认提前天数</div><div class="s-sub">只接受 1–30 的整数，首次使用为三天</div></div>
+                <div class="stepper"><button>−</button><b>3</b><span>天</span><button>＋</button></div>
+              </div>
+              <div class="setrow">
+                <div class="s-mid"><div class="s-name">提醒送达钟点</div><div class="s-sub">按设备本地时间，改动对未送达提醒立即生效</div></div>
+                <span style="font-family:var(--num);font-size:19px;font-weight:600">上午 9:00</span>
+              </div>
+            </div>
+
+            <div class="panel-name">内容</div>
+            <div class="cardpanel">
+              <div class="setrow">
+                <div class="s-mid"><div class="s-name">祝福条数</div><div class="s-sub">默认三条；改动仅对新生成的快照生效</div></div>
+                <div class="stepper"><button>−</button><b>3</b><span>条</span><button>＋</button></div>
+              </div>
+            </div>
+
+            <div class="panel-name">为某个人单独设置（同时覆盖其生日与全部纪念日）</div>
+            <div class="cardpanel">
+              <div class="setrow"><div class="s-mid"><div class="s-name">妈妈 <span class="reltag">家人</span></div><div class="s-sub">跟随全局默认</div></div><span class="toggle"></span></div>
+              <div class="setrow"><div class="s-mid"><div class="s-name">张伟 <span class="reltag">客户</span></div><div class="s-sub">提前 5 天 · 单独覆盖</div></div><span class="toggle on"></span></div>
+            </div>
+
+            <div class="panel-name">通用节日提醒（节日统一使用全局天数）</div>
+            <div class="cardpanel">
+              <div class="setrow"><div class="s-mid"><div class="s-name">圣诞节</div><div class="s-sub">关闭后不推送，仍出现在首页、可查看节日心意</div></div><span class="toggle"></span></div>
+              <div class="setrow"><div class="s-mid"><div class="s-name">感恩节</div></div><span class="toggle on"></span></div>
+              <div class="setrow" style="border:none"><button class="linkbtn">其余四个节日（元旦 / 情人节 / 母亲节 / 父亲节）</button></div>
+            </div>
+
+            <div class="panel-name">账号与说明</div>
+            <div class="cardpanel">
+              <div class="setrow"><div class="s-mid"><div class="s-name">登录</div><div class="s-sub">邮箱验证码登录，登录后数据保存到云端</div></div><span class="chev">›</span></div>
+              <div class="setrow" style="border:none"><div class="s-mid"><div class="s-name">服务说明</div><div class="s-sub">AI 信息用途与账号数据说明</div></div><span class="chev">›</span></div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>首页<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>收藏<span class="tab-dot"></span></a>
+            <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>设置<span class="tab-dot"></span></a>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>设置</b>　全局提前天数、送达钟点、祝福条数、单人覆盖与开关、单节日开关；不提供按单个日子的设置。登录入口与常驻「服务说明」。</div>
+    </div>
+
+    <!-- 服务说明 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll">
+            <div class="apphdr"><div><div class="greet" style="font-size:21px">‹　服务说明</div></div></div>
+            <div class="cardpanel title-panel">
+              <div class="doc">
+                <h4>AI 会看到什么</h4>
+                <p>生成祝福文案与礼物建议时，相关联系人的姓名与特征描述会发送到 AI 服务处理，用来生成贴合这位对象的内容。其余信息（如出生年份）仅用于理解对方所处的人生阶段，祝福与贺卡默认不出现具体年龄。</p>
+                <h4>生成一次，当年固定</h4>
+                <p>每个人 × 日子 × 年份的内容只在首次需要时生成一次，随后作为当年快照固定。修改资料或调整条数后不会自动变化，需在心意详情手动「重新生成」。</p>
+                <h4>账号与云端</h4>
+                <p>登录为可选项。未登录时所有数据只保存在本机，卸载应用或更换手机会丢失；使用邮箱验证码登录后，人员档案、纪念日、特征、快照、贺卡状态、收藏与往年记录保存到云端，换机登录同一账号后仍可查看。</p>
+                <h4>离线时</h4>
+                <p>已生成的内容无网络时仍可完整查看；新内容的生成需要网络，无法生成时页面会明确提示并提供手动重试。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>服务说明</b>（spec 第 13、14 条）　设置页常驻入口，可随时查阅 AI 信息用途与账号云端说明。</div>
+    </div>
+
+    <!-- 登录 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll" style="padding-top:30px">
+            <div class="apphdr" style="justify-content:center;padding-bottom:0">
+              <div class="postmark" style="width:58px;height:58px;"><b style="font-size:20px">@</b><em>MAIL</em></div>
+            </div>
+            <div style="text-align:center;margin:14px 0 26px">
+              <div style="font-family:var(--serif);font-size:24px;font-weight:600">登录心意管家</div>
+              <div class="sub" style="font-size:12.5px;color:var(--ink-soft);margin-top:8px;line-height:1.9">用邮箱验证码登录。<br>不登录也能完整使用，数据先保存在本机。</div>
+            </div>
+            <div class="field"><label>邮箱</label><input class="input" placeholder="name@example.com"></div>
+            <div class="field">
+              <label>验证码</label>
+              <div style="display:flex;gap:10px">
+                <input class="input" placeholder="6 位验证码" style="flex:1">
+                <a class="btn btn-ghost btn-sm" style="white-space:nowrap">获取验证码</a>
+              </div>
+            </div>
+            <a class="btn btn-pine btn-block" style="margin-top:10px">登录</a>
+            <div class="login-note">登录后，人员档案、快照、贺卡状态、收藏与往年记录<br>保存到云端；更换手机登录同一账号，数据仍在。<br>登录态持续保持，可随时退出登录。</div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>登录页</b>（spec 第 14 条 · plan 阶段 10）　Supabase 邮箱验证码登录；登录可选。已登录后此处变为账号信息与「退出登录」。</div>
+    </div>
+  </div>
+
+  <div class="foot-note">
+    AI 心意管家 · 第一版静态原型（Android · React Native + Expo）<br>
+    页面与字段均对应 plan.md / data-model.md；标签页固定为：首页 · 收藏 · 设置。
+  </div>
+</div>
+</body>
+</html>

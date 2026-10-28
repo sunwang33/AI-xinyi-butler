@@ -15,6 +15,10 @@
 - **火山引擎图像大模型**：仅用于**开发期生产内置贺卡模板的美术素材**；App 运行时不调用、不新增运行时功能，贺卡仍按 spec 第 10 条由模板与祝福在本机组合。
 - **lunar-javascript**：仅记录为未来「农历与中国传统节日」（spec「以后再做」）的选型，第一版**不加入运行依赖、不启用**。
 - 平台：第一版只做 **Android**（React Native + Expo）。
+- **基础选型 D1–D5 已拍板**：本机数据库用 Expo SQLite；数据访问走 Repository 抽象层（TypeScript 接口 + SQLite/Supabase 两套实现）；导航用 expo-router；通知仅用 `expo-notifications` 本地调度、不接云端推送；贺卡截图与分享用 `react-native-view-shot` + `expo-media-library` + 系统 `Share`。
+- **轻量状态管理已拍板：Zustand**（不引入 React Query）。
+- **视觉规范已拍板（D10）**：按 `design/prototype.html`、`design/preview.png` 执行——天青底 `#E9F0EB`、信纸白 `#FBFCF8`、松墨 `#26332B`、松绿 `#356453`、蜜蜡 `#C98F3D`、苔绿 `#BFD0C5`；宋体标题、正文黑体、贺卡祝福用手写体。
+- **`design/preview.png` 顶部的「视频预览」概念屏仅为宣传素材，不进 App**：第一版不实现任何启动视频或 App 内视频功能。
 
 ---
 
@@ -25,19 +29,19 @@
 | 层面 | 选型 | 说明 |
 | --- | --- | --- |
 | 前端框架 | React Native + Expo（SDK 当前稳定版，managed workflow） | 第一版仅构建 Android；iOS 在「以后再做」 |
-| 导航 | **建议 expo-router**（文件式路由，Expo 官方推荐；备选 React Navigation） | 需开发者确认，见决策点 D3 |
-| 本机数据库 | **建议 Expo SQLite**（`expo-sqlite`） | 前期阶段全部业务数据只存本机；备选 MMKV 不支持关系查询，不推荐 |
+| 导航 | **expo-router**（文件式路由） | **已拍板（D3）**；第 3 节路由结构据此定稿 |
+| 本机数据库 | **Expo SQLite**（`expo-sqlite`） | **已拍板（D1）**；前期阶段全部业务数据只存本机 |
 | 云端数据库 | **Supabase Postgres**（阶段 10 启用） | 登录后数据上云、换机不丢；表结构与本机表一一对应，按用户隔离 |
 | 登录 | **Supabase Auth，邮箱验证码（OTP）**（阶段 10 启用） | 登录为可选项，未登录先用本机（spec 第 14 条）；登录态由 Supabase SDK 保持 |
-| 数据访问 | Repository 抽象层（TypeScript 接口 + SQLite/Supabase 两套实现） | 前期注入 SQLite 实现，阶段 10 登录后切换/并存；UI 只依赖接口 |
-| 服务端状态 | Repository + 轻量状态管理（**建议 Zustand 或 Context**；不强制引入 React Query） | 快照状态机简单，保持依赖克制 |
-| 本地通知 | `expo-notifications`（**全部本地调度，不接云端推送**） | 定时提醒在本机完成，登录不改变通知方案；详见 1.4 |
+| 数据访问 | Repository 抽象层（TypeScript 接口 + SQLite/Supabase 两套实现） | **已拍板（D2）**；前期注入 SQLite 实现，阶段 10 登录后切换/并存；UI 只依赖接口 |
+| 服务端状态 | Repository + **Zustand** 轻量状态管理（不引入 React Query） | **已拍板**；快照状态机简单，保持依赖克制 |
+| 本地通知 | `expo-notifications`（**全部本地调度，不接云端推送**） | **已拍板（D4）**；定时提醒在本机完成，登录不改变通知方案；详见 1.4 |
 | 图标角标 | `expo-notifications` 的 badge 能力 | 日子当天的应用图标角标提示 |
 | AI 调用 | Supabase **Edge Functions** 网关 → **DeepSeek**（已定） | API Key 只存在服务端；阶段 10 后函数可校验登录用户身份，前期匿名限频访问 |
-| 贺卡渲染 | React Native 视图模板 + `react-native-view-shot` 截图为图片 | 模板在本机组合，符合 spec「贺卡由模板与祝福话语在本机组合」 |
+| 贺卡渲染 | React Native 视图模板 + `react-native-view-shot` 截图为图片 | **已拍板（D5）**；模板在本机组合，符合 spec「贺卡由模板与祝福话语在本机组合」 |
 | 贺卡模板素材 | **火山引擎图像大模型（开发期使用）** | 仅在开发阶段用其生成内置模板背景/插画并打包进 App；App 运行时不调用火山引擎 |
 | 农历计算 | **lunar-javascript（未来选型，第一版不启用）** | 仅供 spec「以后再做」中的农历生日与传统节日使用；第一版不加入运行依赖 |
-| 保存与分享 | `expo-media-library`（保存到手机）+ React Native 自带 `Share`（系统分享面板） | 对应 spec「导出为图片保存到手机」「经系统分享面板分享」（B 组验收口径问题沿用此实现） |
+| 保存与分享 | `expo-media-library`（保存到手机）+ React Native 自带 `Share`（系统分享面板） | **已拍板（D5）**；对应 spec「导出为图片保存到手机」「经系统分享面板分享」（B 组验收口径问题沿用此实现） |
 | 电商跳转 | 链接 / URL Scheme 打开电商搜索结果页 | 平台与降级方式待拍板（D7、A1、B 组） |
 | 工程基础 | TypeScript、ESLint、EAS Build（出 Android 安装包） | 通知重启补发等能力可能需要 config plugin，真机验证 |
 
@@ -63,15 +67,16 @@
 
 | 编号 | 决策点 | 建议 / 选项 | 拍板时限 |
 | --- | --- | --- | --- |
-| D1 | 本机数据库 | 建议 Expo SQLite（关系型，契合人员-纪念日-特征结构） | 阶段 0 |
-| D2 | 数据访问形态 | 建议 Repository 接口 + SQLite 实现（云迁移预留，已确认方向） | 阶段 0 |
-| D3 | 导航库 | 建议 expo-router；备选 React Navigation | 阶段 0 |
-| D4 | 通知方案 | 建议仅用 `expo-notifications` 本地通知，不引入 FCM/云端推送（阶段 10 登录后仍保持本地调度）；**风险见 1.4** | 阶段 0 |
-| D5 | 贺卡截图与分享 | 建议 `react-native-view-shot` + `expo-media-library` + 系统 `Share` | 阶段 0 |
+| D1 | 本机数据库 | **已拍板：Expo SQLite**（关系型，契合人员-纪念日-特征结构） | **已拍板** |
+| D2 | 数据访问形态 | **已拍板：Repository 接口 + SQLite 实现**（云迁移预留）；轻量状态管理用 Zustand | **已拍板** |
+| D3 | 导航库 | **已拍板：expo-router** | **已拍板** |
+| D4 | 通知方案 | **已拍板：仅用 `expo-notifications` 本地通知**，不引入 FCM/云端推送（阶段 10 登录后仍保持本地调度）；**风险见 1.4** | **已拍板** |
+| D5 | 贺卡截图与分享 | **已拍板：`react-native-view-shot` + `expo-media-library` + 系统 `Share`** | **已拍板** |
 | D6 | AI 服务商与具体模型 | **已定：DeepSeek**；Edge Functions 内封装，更换供应商不影响 App | 已拍板 |
 | D7 | 「去看看」的电商平台（一个或多个） | spec「待开发者拍板的选择」，同时决定 A1 中多平台按钮形态 | **阶段 5 开工前** |
 | D8 | 贺卡首批模板的美术风格与具体数量（不少于三套） | spec「待开发者拍板的选择」；画布比例/分辨率即 A3，须先定 | **阶段 7 模板开工前** |
 | D9 | 内置节日是否在六个之外增删 | spec「待开发者拍板的选择」；默认严格按六个实现 | 阶段 2 开工前 |
+| D10 | App 视觉规范（色板、字体） | **已拍板：按 `design/prototype.html`、`design/preview.png` 执行**——天青底 `#E9F0EB`、信纸白 `#FBFCF8`、松墨 `#26332B`、松绿 `#356453`、蜜蜡 `#C98F3D`、苔绿 `#BFD0C5`；宋体标题、正文黑体、贺卡祝福用手写体 | **已拍板** |
 
 ### 1.4 通知方案的专项风险与对策（D4 配套）
 
@@ -113,7 +118,7 @@ spec 第 6 条要求：定时送达、同日多条合并、同年仅一条、设
 
 ## 三、路由和入口
 
-建议采用 expo-router（D3 确认后定稿；若选 React Navigation，路由名等价映射）。
+采用 expo-router（D3 已拍板，路由结构即本节定稿，不再保留 React Navigation 备选）。
 
 ### 3.1 路由结构
 
@@ -315,7 +320,7 @@ spec 第 6 条要求：定时送达、同日多条合并、同年仅一条、设
 
 ### 阶段 0：工程基座（难度：低）
 
-- Expo + TypeScript 工程（仅 Android 构建配置）、三个 Tab（首页 / 收藏 / 设置）空骨架、expo-router（D3）、SQLite 初始化与迁移机制、Repository 接口与 SQLite 实现、主题与基础组件、EAS 构建打通。
+- Expo + TypeScript 工程（仅 Android 构建配置）、三个 Tab（首页 / 收藏 / 设置）空骨架、expo-router（D3 已拍板）、SQLite 初始化与迁移机制、Repository 接口与 SQLite 实现、Zustand 状态管理、主题与基础组件（视觉规范 D10 已拍板，按 `design/prototype.html`：天青底 `#E9F0EB`、信纸白 `#FBFCF8`、松墨 `#26332B`、松绿 `#356453`、蜜蜡 `#C98F3D`、苔绿 `#BFD0C5`；宋体标题、正文黑体、贺卡祝福手写体）、EAS 构建打通。
 
 ### 阶段 1：人员档案与首次引导（spec 第 1、2、3 条；难度：低）
 
@@ -398,7 +403,7 @@ iOS；农历与中国传统节日及按地区适配；「换一批」、语气�
 
 | 门禁 | 事项 | 必须拍板的时点 |
 | --- | --- | --- |
-| D1–D5 | 本机库、导航、通知、贺卡截图分享等基础选型 | 阶段 0 |
+| D1–D5、D10 | 本机库、数据访问与状态管理、导航、通知、贺卡截图分享、视觉规范 | **已拍板**（见〇节与 1.3） |
 | D6 | AI 供应商 | **已拍板：DeepSeek** |
 | D7 + A1 | 电商平台；礼物快照字段、搜索词来源、按钮形态 | 阶段 5 开工前 |
 | D8 + A2 + A3 | 模板风格数量；无快照时贺卡组装时序；导出画布比例分辨率 | 阶段 7 模板开工前 |
