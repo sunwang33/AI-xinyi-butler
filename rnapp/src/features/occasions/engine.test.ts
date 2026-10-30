@@ -10,7 +10,12 @@ import type {
   Person,
 } from '../../data/entities';
 import { FESTIVALS } from './festivals';
-import { computeHitsInRange, listUpcoming, WINDOW_DAYS } from './engine';
+import {
+  computeHitsInRange,
+  listFollowedFestivals,
+  listUpcoming,
+  WINDOW_DAYS,
+} from './engine';
 import type { OccasionHit } from './engine';
 import {
   buildDayListHref,
@@ -379,6 +384,93 @@ describe('节日关注过滤（F11：festival_settings.disabled）', () => {
     const refollowed = listUpcoming('2025-12-15', [], [], []);
     expect(refollowed).toHaveLength(2);
     expect(findByCode(refollowed, 'christmas')?.date).toBe('2025-12-25');
+  });
+});
+
+describe('listFollowedFestivals 已关注节日长期倒计时（不受 30 天窗口限制）', () => {
+  it('全部关注时返回 6 条，各为自今天起的下一次发生且按 date 升序；今天正逢节日时含今天', () => {
+    // 2025-06-01：上半年节日已过，下次均落在 2025 下半年或 2026 年
+    const hits = listFollowedFestivals('2025-06-01');
+    expect(hits).toHaveLength(6);
+    expect(hits.every((hit) => hit.occasionType === 'festival')).toBe(true);
+    expect([...new Set(hits.map((hit) => hit.festivalCode))].sort()).toEqual(
+      [...FESTIVAL_CODES].sort(),
+    );
+    expect(hits.map((hit) => hit.date)).toEqual([
+      '2025-06-15', // 父亲节（2025 年尚未到）
+      '2025-11-27', // 感恩节
+      '2025-12-25', // 圣诞节
+      '2026-01-01', // 元旦
+      '2026-02-14', // 情人节
+      '2026-05-10', // 母亲节（2025 年 5/11 已过）
+    ]);
+    expect(hits.every((hit) => hit.daysFromToday >= 0)).toBe(true);
+
+    // 今天就是圣诞节：下一次发生即今天（daysFromToday=0），区间末的次年圣诞被去重
+    const onChristmas = listFollowedFestivals('2025-12-25');
+    const christmas = findByCode(onChristmas, 'christmas');
+    expect(christmas?.date).toBe('2025-12-25');
+    expect(christmas?.daysFromToday).toBe(0);
+    expect(onChristmas.filter((hit) => hit.festivalCode === 'christmas')).toHaveLength(1);
+  });
+
+  it('disabledFestivalCodes 中的节日缺席，其余节日照常各一条', () => {
+    const hits = listFollowedFestivals('2025-06-01', ['christmas', 'new_year']);
+    expect(hits).toHaveLength(4);
+    expect(findByCode(hits, 'christmas')).toBeUndefined();
+    expect(findByCode(hits, 'new_year')).toBeUndefined();
+    expect(findByCode(hits, 'thanksgiving')?.date).toBe('2025-11-27');
+    expect(findByCode(hits, 'valentines_day')?.date).toBe('2026-02-14');
+    expect([...new Set(hits.map((hit) => hit.festivalCode))]).toHaveLength(4);
+  });
+
+  it('跨年（today 取 12 月底）时元旦等节日落在次年且日期正确、按临近排序', () => {
+    const hits = listFollowedFestivals('2025-12-31');
+    expect(hits).toHaveLength(6);
+    expect(hits.map((hit) => hit.date)).toEqual([
+      '2026-01-01',
+      '2026-02-14',
+      '2026-05-10',
+      '2026-06-21',
+      '2026-11-26',
+      '2026-12-25',
+    ]);
+    expect(hits.every((hit) => hit.year === 2026)).toBe(true);
+    const newYear = findByCode(hits, 'new_year');
+    expect(newYear?.date).toBe('2026-01-01');
+    expect(newYear?.year).toBe(2026);
+    expect(newYear?.daysFromToday).toBe(1);
+  });
+});
+
+describe('listUpcoming 第 5 参 options.includeFestivals', () => {
+  it('includeFestivals=false 时 30 天窗口内不产出节日，人员生日照常；缺省行为不变', () => {
+    const xmasBaby = makePerson({
+      id: 'xmas-baby',
+      name: '圣诞宝宝',
+      birthdayMonth: 12,
+      birthdayDay: 25,
+    });
+
+    // 无人员且排除节日：窗口跨年也没有任何命中
+    expect(
+      listUpcoming('2025-12-15', [], [], undefined, { includeFestivals: false }),
+    ).toHaveLength(0);
+
+    // 有人员：只保留生日，圣诞/元旦节日均不产出
+    const withPerson = listUpcoming(
+      '2025-12-15',
+      [xmasBaby],
+      [],
+      undefined,
+      { includeFestivals: false },
+    );
+    expect(withPerson).toHaveLength(1);
+    expect(findBirthday(withPerson, 'xmas-baby')?.date).toBe('2025-12-25');
+    expect(withPerson.every((hit) => hit.occasionType !== 'festival')).toBe(true);
+
+    // 不传 options：既有行为保持（窗口内圣诞与元旦两条节日）
+    expect(listUpcoming('2025-12-15', [], [])).toHaveLength(2);
   });
 });
 

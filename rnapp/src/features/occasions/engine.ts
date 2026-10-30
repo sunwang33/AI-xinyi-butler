@@ -179,16 +179,25 @@ export function computeHitsInRange(args: ComputeHitsArgs): OccasionHit[] {
   });
 }
 
+/** listUpcoming 的可选透传项 */
+export interface ListUpcomingOptions {
+  /** 是否包含六个内置节日，默认 true（不传保持既有行为） */
+  includeFestivals?: boolean;
+}
+
 /**
  * 首页临近列表：区间 [today, today + WINDOW_DAYS - 1]（含今天共 30 天），
  * 仅返回 daysFromToday >= 0 的条目；六个内置节日默认全关注，传入
  * disabledFestivalCodes（F11 取关）可过滤掉对应节日。
+ * 第 5 参 options.includeFestivals=false 时不产出节日（提醒页人员日子查询用，
+ * 节日长期倒计时走 listFollowedFestivals）。
  */
 export function listUpcoming(
   today: string,
   persons: Person[],
   anniversaries: Anniversary[],
   disabledFestivalCodes?: readonly FestivalCode[],
+  options?: ListUpcomingOptions,
 ): OccasionHit[] {
   const end = new Date(
     parseDate(today).getTime() + (WINDOW_DAYS - 1) * MS_PER_DAY,
@@ -202,5 +211,46 @@ export function listUpcoming(
     persons,
     anniversaries,
     disabledFestivalCodes,
+    includeFestivals: options?.includeFestivals,
   }).filter((hit) => hit.daysFromToday >= 0);
+}
+
+/**
+ * 已关注通用节日的长期倒计时（F5 节日区，2026-10-30 拍板：不受 30 天窗口限制）：
+ * 六个内置节日中未取关的，各自返回自 today（含今天）起的下一次发生，共一条，
+ * 结果按 date 升序（即临近程度排序）。
+ * 实现上取 [today, today+366] 闭区间——366 天足以让每个节日至少发生一次；
+ * 区间跨年时年初节日可能在今年末/明年初各出现一次，再按 festivalCode 去重保留首条。
+ */
+export function listFollowedFestivals(
+  today: string,
+  disabledFestivalCodes?: readonly FestivalCode[],
+): OccasionHit[] {
+  const end = new Date(parseDate(today).getTime() + 366 * MS_PER_DAY);
+  const to = formatDate(end.getUTCFullYear(), end.getUTCMonth() + 1, end.getUTCDate());
+
+  const hits = computeHitsInRange({
+    today,
+    from: today,
+    to,
+    persons: [],
+    anniversaries: [],
+    disabledFestivalCodes,
+  });
+
+  // hits 已按 date 升序：同一 festivalCode 跨年出现两次时保留首条（即下一次发生）
+  const seen = new Set<FestivalCode>();
+  const result: OccasionHit[] = [];
+  for (const hit of hits) {
+    const code = hit.festivalCode;
+    if (hit.occasionType !== 'festival' || !code) {
+      continue;
+    }
+    if (seen.has(code)) {
+      continue;
+    }
+    seen.add(code);
+    result.push(hit);
+  }
+  return result;
 }

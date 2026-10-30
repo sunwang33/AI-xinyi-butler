@@ -3,8 +3,10 @@
  * - useFocusEffect：每次进入/聚焦提醒页都重新读取，人员或纪念日改动返回后即时反映；
  * - 数据走 Repository：listPersons 后逐人 listAnniversaries（无全量纪念日接口），Promise.all 并发后拍平；
  * - today 取设备本地日期（new Date() 本地口径，自写 YYYY-MM-DD 格式化，不引日期库）；
- * - 命中交给日子引擎 listUpcoming（未来 30 天含今天，已过滤已过、按临近程度排序）；
- *   窗口大小属 B 组未拍板项，沿用在制 30 天口径，不新定；
+ * - 人员日子（生日/纪念日）走 listUpcoming 的 30 天窗口（含今天，已过滤已过、按临近排序），
+ *   includeFestivals=false 不产出节日；窗口口径沿用在制 30 天，不新定；
+ * - 通用节日走 listFollowedFestivals（2026-10-30 拍板）：全部已关注节日各自返回
+ *   自今天起的下一次发生，按临近排序，不受 30 天窗口限制；
  * - T66：读取 festival_settings，把 disabled=1（已取关）的节日代号传给引擎过滤，
  *   festivalHits 只含已关注节日；followedCount 为六节日中已关注个数（管理 Sheet 标题用）；
  * - 命中按提醒页三段拆为 personHits（生日/纪念日）与 festivalHits（通用节日）；
@@ -15,7 +17,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { getRepository } from '../../data/repository';
 import type { Anniversary, FestivalCode } from '../../data/entities';
-import { listUpcoming } from '../occasions/engine';
+import { listFollowedFestivals, listUpcoming } from '../occasions/engine';
 import type { OccasionHit } from '../occasions/engine';
 
 export interface UpcomingOccasionsState {
@@ -23,7 +25,7 @@ export interface UpcomingOccasionsState {
   loading: boolean;
   /** 未来 30 天（含今天）的生日/纪念日命中，按临近程度由近到远，供主卡与近期日子列表使用 */
   personHits: OccasionHit[];
-  /** 未来 30 天（含今天）且已关注的通用节日命中（F11，取关节日不出现） */
+  /** 全部已关注通用节日各一条「自今天起的下一次发生」（F11，取关节日不出现），按临近排序，不受 30 天窗口限制 */
   festivalHits: OccasionHit[];
   /** 六个内置节日中当前已关注的个数（0–6，节日区「已关注 N 个」与全取关空态用） */
   followedCount: number;
@@ -79,19 +81,24 @@ export function useUpcomingOccasions(): UpcomingOccasionsState {
         const disabledFestivalCodes: FestivalCode[] = festivalSettings
           .filter((item) => item.disabled)
           .map((item) => item.festivalCode);
+        const today = formatTodayLocal();
         return {
           persons,
           followedCount: festivalSettings.filter((item) => !item.disabled).length,
-          hits: listUpcoming(formatTodayLocal(), persons, anniversaries, disabledFestivalCodes),
+          // 人员日子：30 天窗口且不含节日
+          personHits: listUpcoming(today, persons, anniversaries, undefined, {
+            includeFestivals: false,
+          }),
+          // 通用节日：全部已关注节日的下一次发生，不受 30 天窗口限制
+          festivalHits: listFollowedFestivals(today, disabledFestivalCodes),
         };
       })
-      .then(({ persons, hits: nextHits, followedCount: nextFollowedCount }) => {
+      .then(({ persons, personHits: nextPersonHits, festivalHits: nextFestivalHits, followedCount: nextFollowedCount }) => {
         if (!active) {
           return;
         }
-        // 三段拆分：主卡与近期日子列表只取人员日子；节日区单独取已关注节日命中
-        setPersonHits(nextHits.filter((hit) => hit.occasionType !== 'festival'));
-        setFestivalHits(nextHits.filter((hit) => hit.occasionType === 'festival'));
+        setPersonHits(nextPersonHits);
+        setFestivalHits(nextFestivalHits);
         setFollowedCount(nextFollowedCount);
         setPersonsEmpty(persons.length === 0);
         setError(false);
