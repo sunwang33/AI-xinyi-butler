@@ -184,10 +184,12 @@ export interface PersonReminderSettings {
   disabled: boolean;
 }
 
-/** 内置节日提醒开关（每节日一行，仅本机） */
+/** 内置节日关注状态（每节日一行，仅本机；F11，2026-10-30 仅语义变更无迁移） */
 export interface FestivalSetting {
   festivalCode: FestivalCode;
-  /** 关闭后不推送，但仍出现在首页、可照常进入使用 */
+  /** 关注/取关状态：false(0)=已关注（默认六个全部关注）；true(1)=已取关——
+   * 取关后不推送、不在提醒页节日区显示、无入口进入节日心意；
+   * 重新关注后恢复展示与当年推送；取关不溯及既往，历史 Tab 已收藏/已送出内容保留 */
   disabled: boolean;
 }
 

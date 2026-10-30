@@ -1,26 +1,32 @@
 import Svg, { Circle, Path } from 'react-native-svg';
 
 /**
- * 底部标签栏图标，线条路径与 design/prototype.html 中三个 tab 图标一致：
- * 首页（房子）、收藏（书签）、设置（齿轮）。
+ * 底部标签栏图标，线条路径与 design/prototype.html .tabbar 四个 tab 图标一致：
+ * 提醒（铃铛）、联系人（人像）、历史（时钟）、设置（齿轮）。
  */
-export function HomeIcon({ color, size = 23 }: { color: string; size?: number }) {
+export function RemindIcon({ color, size = 22 }: { color: string; size?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"
-        stroke={color}
-        strokeWidth={1.7}
-        strokeLinejoin="round"
-      />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}>
+      <Path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z" />
+      <Path d="M10 20a2 2 0 0 0 4 0" />
     </Svg>
   );
 }
 
-export function BookmarkIcon({ color, size = 23 }: { color: string; size?: number }) {
+export function ContactsIcon({ color, size = 22 }: { color: string; size?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M7 4h10v17l-5-3.5L7 21z" stroke={color} strokeWidth={1.7} strokeLinejoin="round" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}>
+      <Circle cx={12} cy={8} r={3.4} />
+      <Path d="M5 20a7 7 0 0 1 14 0" />
+    </Svg>
+  );
+}
+
+export function HistoryIcon({ color, size = 22 }: { color: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}>
+      <Circle cx={12} cy={12} r={9} />
+      <Path d="M12 7v5l3.5 2" />
     </Svg>
   );
 }

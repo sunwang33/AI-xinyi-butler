@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { getDatabase } from '../src/data/db';
 import { useAccountStore } from '../src/features/account/authStore';
+import { initializeReminders } from '../src/features/reminders/scheduler';
 import {
   NotoSansSC_400Regular,
   NotoSansSC_500Medium,
@@ -67,6 +68,17 @@ export default function RootLayout() {
       mounted = false;
     };
   }, []);
+
+  // 数据库就绪后初始化提醒（渠道、权限一次申请、未来 30 天调度重算）；
+  // 异步执行不阻塞首屏，失败仅记录（通知不影响首页等无权限场景）
+  useEffect(() => {
+    if (!dbReady) {
+      return;
+    }
+    initializeReminders().catch((error: unknown) => {
+      console.error('[reminders] 初始化失败', error);
+    });
+  }, [dbReady]);
 
   useEffect(() => {
     if ((fontsLoaded || fontError) && dbReady) {

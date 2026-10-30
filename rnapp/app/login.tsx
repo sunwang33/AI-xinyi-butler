@@ -36,7 +36,7 @@ export default function LoginScreen() {
 
   // 会话恢复完成且已登录，不允许停留在登录页
   if (ready && session) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/(tabs)/remind" />;
   }
 
   const trimmedEmail = email.trim();
@@ -56,7 +56,7 @@ export default function LoginScreen() {
     setError(null);
     try {
       await signIn(trimmedEmail, password);
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/remind');
     } catch (e) {
       setError(e instanceof Error ? e.message : '登录失败，请稍后重试');
     } finally {

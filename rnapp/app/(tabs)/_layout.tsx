@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BookmarkIcon, GearIcon, HomeIcon } from '../../src/components';
+import { ContactsIcon, GearIcon, HistoryIcon, RemindIcon } from '../../src/components';
 import { colors, fonts } from '../../src/theme/tokens';
 
 /** 底部标签：图标 + 文字，选中时文字下方出现蜜蜡色小圆点（对应原型 .tab.on） */
@@ -31,7 +31,8 @@ function TabLabel({ focused, children }: { focused: boolean; children: string })
 }
 
 /**
- * 底部标签栏，严格为 spec 全局规则 5 规定的三个：首页 / 收藏 / 设置。
+ * 底部标签栏，严格为 spec 全局规则 5（D15/D19/D20）规定的四个：
+ * 提醒 / 联系人 / 历史 / 设置。
  */
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -51,21 +52,31 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="remind"
         options={{
-          title: '首页',
+          title: '提醒',
           tabBarIcon: ({ focused }) => (
-            <HomeIcon color={focused ? colors.pineDeep : colors.inkFaint} />
+            <RemindIcon color={focused ? colors.pineDeep : colors.inkFaint} />
           ),
           tabBarLabel: ({ focused, children }) => <TabLabel focused={focused}>{children}</TabLabel>,
         }}
       />
       <Tabs.Screen
-        name="favorites"
+        name="contacts"
         options={{
-          title: '收藏',
+          title: '联系人',
           tabBarIcon: ({ focused }) => (
-            <BookmarkIcon color={focused ? colors.pineDeep : colors.inkFaint} />
+            <ContactsIcon color={focused ? colors.pineDeep : colors.inkFaint} />
+          ),
+          tabBarLabel: ({ focused, children }) => <TabLabel focused={focused}>{children}</TabLabel>,
+        }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: '历史',
+          tabBarIcon: ({ focused }) => (
+            <HistoryIcon color={focused ? colors.pineDeep : colors.inkFaint} />
           ),
           tabBarLabel: ({ focused, children }) => <TabLabel focused={focused}>{children}</TabLabel>,
         }}

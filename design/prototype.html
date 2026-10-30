@@ -23,6 +23,9 @@
   --honey:#C98F3D;         /* 蜜蜡：邮戳/强调 */
   --honey-deep:#A9732C;
   --honey-wash:#F2E6CE;
+  --seal:#B0493B;          /* 印泥红：邮戳印章（D20 新增，仅用于邮戳） */
+  --seal-deep:#963A2E;
+  --seal-wash:#F7E9E5;
   --night:#23453F;         /* 模板「月夜」深青（非黑） */
   --line:#D2DFD6;
   --serif:"Noto Serif SC","Songti SC","SimSun",serif;
@@ -71,17 +74,48 @@ body{
 .statusbar .sb-icons{display:flex;gap:5px;align-items:center;}
 .screen{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;}
 .scroll{flex:1;overflow:hidden;padding:0 18px 16px;}
-/* ============ 底部标签栏（首页 / 收藏 / 设置） ============ */
+/* ============ 底部标签栏（提醒 / 联系人 / 历史 / 设置，D15/D19） ============ */
 .tabbar{
   flex:none;height:74px;background:rgba(251,252,248,.96);
   border-top:1px solid var(--line);
   display:flex;padding-bottom:8px;
 }
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-faint);font-size:11.5px;text-decoration:none;}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-faint);font-size:11px;text-decoration:none;}
 .tab.on{color:var(--pine-deep);font-weight:600;}
-.tab svg{width:23px;height:23px;}
+.tab svg{width:22px;height:22px;}
 .tab.on .tab-dot{width:5px;height:5px;border-radius:50%;background:var(--honey);margin-top:-1px;}
 .tab .tab-dot{width:5px;height:5px;}
+/* ============ D20 邮戳：主卡"心意已就绪"大印章 ============ */
+.seal{flex:none;transform:rotate(-9deg);}
+.seal svg{display:block;}
+/* 「下一位」主卡（F5） */
+.hero{
+  background:linear-gradient(140deg,#FDFBF6 0%,#F6EDE0 100%);
+  border:1px solid #E7DBC6;border-radius:18px;
+  padding:18px 18px 16px;display:flex;gap:10px;align-items:center;margin-bottom:6px;
+}
+.hero .h-t{font-family:var(--serif);font-size:22px;font-weight:600;line-height:1.5;}
+.hero .h-d{font-size:12px;color:var(--ink-soft);margin-top:7px;}
+.hero .h-s{font-size:11.5px;color:var(--honey-deep);margin-top:5px;}
+/* 倒计时药丸（节日区） */
+.pill{flex:none;border:1px solid var(--sage);background:var(--paper);color:var(--pine-deep);
+  border-radius:999px;font-size:12px;padding:6px 13px;white-space:nowrap;}
+.pill.today{background:var(--honey);border-color:var(--honey);color:#fff;}
+/* 节日行关注星标（F11，交互形态属 B 组，此处以星标示意） */
+.fav-star{flex:none;width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--honey);}
+.fav-star svg{width:17px;height:17px;}
+/* 历史 Tab 分段控件（已送出 / 收藏，D19） */
+.seg{display:flex;background:var(--paper-dim);border:1px solid var(--line);border-radius:999px;padding:3px;margin:2px 0 14px;}
+.seg a{flex:1;text-align:center;font-size:13px;padding:8px 0;border-radius:999px;color:var(--ink-soft);text-decoration:none;}
+.seg a.on{background:var(--paper);color:var(--pine-deep);font-weight:600;box-shadow:0 1px 4px rgba(38,51,43,.08);}
+/* 已送出流水行的小红戳（F17） */
+.sent-mark{
+  width:42px;height:42px;flex:none;border-radius:50%;border:1.4px solid var(--seal);
+  color:var(--seal);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  line-height:1;font-family:var(--num);background:rgba(176,73,59,.04);
+}
+.sent-mark b{font-size:14px;font-weight:600;}
+.sent-mark em{font-style:normal;font-size:8px;margin-top:2px;font-family:var(--sans);letter-spacing:.1em;}
 /* ============ 通用元素 ============ */
 .apphdr{display:flex;align-items:flex-end;justify-content:space-between;padding:6px 4px 14px;}
 .apphdr .greet{font-family:var(--serif);font-size:24px;font-weight:600;letter-spacing:.02em;}
@@ -319,6 +353,7 @@ body{
       <div class="token"><span class="swatch" style="background:#356453"></span>松绿 <b>#356453</b></div>
       <div class="token"><span class="swatch" style="background:#C98F3D"></span>蜜蜡 <b>#C98F3D</b></div>
       <div class="token"><span class="swatch" style="background:#BFD0C5"></span>苔绿 <b>#BFD0C5</b></div>
+      <div class="token"><span class="swatch" style="background:#B0493B"></span>印泥红 · 仅邮戳（D20） <b>#B0493B</b></div>
       <div class="token" style="flex-direction:column;align-items:flex-start;gap:2px;">
         <span style="font-family:var(--serif);font-size:15px;color:var(--ink);">宋体标题 · 正文黑体</span>
         <span style="font-family:var(--hand);font-size:18px;color:var(--pine-deep);">贺卡祝福用手写体</span>
@@ -383,8 +418,8 @@ body{
     </div>
   </div>
 
-  <!-- ============ 流程二：首页与人员 ============ -->
-  <div class="flow"><span class="seq">贰</span><h2>首页与人员档案</h2><span>没档案时有引导；首页是按临近程度排好的一沓明信片</span></div>
+  <!-- ============ 流程二：提醒与联系人 ============ -->
+  <div class="flow"><span class="seq">贰</span><h2>提醒、联系人与人员档案</h2><span>没档案时有引导；提醒页是「下一位」主卡加近期日子，人员管理归联系人 Tab（D15、F5）</span></div>
   <div class="frames">
 
     <!-- 首次引导 -->
@@ -410,10 +445,10 @@ body{
           </div>
         </div>
       </div>
-      <div class="cap"><b>添加引导（首次）</b>　没有任何档案时首次进入 App 出现；完成第一位人员添加后直接进入正常首页，之后不再出现。</div>
+      <div class="cap"><b>添加引导（首次）</b>　没有任何档案时首次进入 App 出现；完成第一位人员添加后直接进入提醒 Tab，之后不再出现。</div>
     </div>
 
-    <!-- 首页 -->
+    <!-- 提醒 Tab -->
     <div class="frame">
       <div class="phone">
         <div class="statusbar"><span>9:00</span><span class="sb-icons">
@@ -424,24 +459,33 @@ body{
           <div class="scroll">
             <div class="apphdr">
               <div>
-                <div class="greet">最近要惦记的人</div>
-                <div class="sub">10 月 28 日 · 按临近程度由近到远</div>
-              </div>
-              <div style="display:flex;gap:14px;align-items:center;">
-                <div class="postmark"><b>28</b><em>OCT</em></div>
+                <div class="greet">提醒</div>
+                <div class="sub">10 月 30 日 · 星期五</div>
               </div>
             </div>
-            <button class="linkbtn" style="margin:0 2px 12px">人员添加与管理 ›</button>
 
-            <div class="pc-row today">
-              <span class="honey-dot"></span>
-              <div class="stamp sm tone-warm">生</div>
-              <div class="mid">
-                <div class="who">陈叔 <span class="reltag">其他</span></div>
-                <div class="what">生日 · 就是今天</div>
+            <!-- 下一位主卡（F5）：祝福与礼物当年快照均已生成才盖"已备好"印（D20） -->
+            <div class="hero">
+              <div style="flex:1;min-width:0">
+                <div class="h-t">下一位，是妈妈的生日</div>
+                <div class="h-d">10 月 31 日 · 星期六</div>
+                <div class="h-s">祝福语、礼物、贺卡都已备好</div>
               </div>
-              <div class="days"><b>今天</b></div>
+              <div class="seal">
+                <svg width="90" height="90" viewBox="0 0 110 110">
+                  <defs><path id="sealarc" d="M55,10 a45,45 0 1,1-0.1,0"/></defs>
+                  <circle cx="55" cy="55" r="52" fill="none" stroke="#B0493B" stroke-width="1.5" stroke-dasharray="3 3" opacity=".8"/>
+                  <circle cx="55" cy="55" r="44" fill="none" stroke="#B0493B" stroke-width="1.3"/>
+                  <text font-size="9" fill="#B0493B" letter-spacing="2.5">
+                    <textPath href="#sealarc" startOffset="1%">心意邮局 · 惦记每一个重要日子</textPath>
+                  </text>
+                  <text x="55" y="57" text-anchor="middle" font-family="Cormorant Garamond,serif" font-size="30" font-weight="600" fill="#B0493B">1<tspan font-size="14" font-family="Noto Sans SC">天</tspan></text>
+                  <text x="55" y="75" text-anchor="middle" font-family="Noto Serif SC,serif" font-size="11" letter-spacing="2" fill="#B0493B">已备好</text>
+                </svg>
+              </div>
             </div>
+
+            <div class="secttl">近期日子 <span class="en">birthday & anniversary</span></div>
 
             <div class="pc-row">
               <div class="stamp">生</div>
@@ -449,7 +493,7 @@ body{
                 <div class="who">妈妈 <span class="reltag">家人</span></div>
                 <div class="what">生日 · 爱养花，今年刚退休</div>
               </div>
-              <div class="days"><b>3</b><span>天后</span></div>
+              <div class="days"><b>1</b><span>天后</span></div>
             </div>
 
             <div class="pc-row">
@@ -458,47 +502,72 @@ body{
                 <div class="who">老王 <span class="reltag">挚友</span></div>
                 <div class="what">乔迁 · 喜欢手冲咖啡，养了只橘猫</div>
               </div>
-              <div class="days"><b>12</b><span>天后</span></div>
-            </div>
-
-            <div class="pc-row">
-              <div class="stamp tone-night">恩</div>
-              <div class="mid">
-                <div class="who">感恩节 <span class="reltag">通用节日</span></div>
-                <div class="what">可选一位人查看定制心意，也可看通用版</div>
-              </div>
-              <div class="days"><b>29</b><span>天后</span></div>
+              <div class="days"><b>3</b><span>天后</span></div>
             </div>
 
             <div class="pc-row">
               <div class="stamp">生</div>
               <div class="mid">
                 <div class="who">张伟 <span class="reltag">客户</span></div>
-                <div class="what">生日 · 重名时以关系标签区分</div>
+                <div class="what">生日 · 设置了提前 5 天单独提醒</div>
               </div>
-              <div class="days"><b>34</b><span>天后</span></div>
+              <div class="days"><b>5</b><span>天后</span></div>
+            </div>
+
+            <div class="secttl">通用节日 <span class="en">festivals</span><span class="linkbtn" style="margin-left:auto;font-size:12px;color:var(--ink-faint)">已关注 6 个</span></div>
+
+            <div class="pc-row">
+              <div class="stamp tone-night">恩</div>
+              <div class="mid">
+                <div class="who">感恩节</div>
+                <div class="what">十一月第四个星期四 · 11 月 26 日</div>
+              </div>
+              <span class="fav-star" title="关注中，点按取关"><svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.3l6.1-.7z"/></svg></span>
+              <span class="pill">还有 27 天</span>
             </div>
 
             <div class="pc-row">
               <div class="stamp tone-night">圣</div>
               <div class="mid">
-                <div class="who">圣诞节 <span class="reltag">通用节日</span></div>
-                <div class="what">已关闭提醒，仍可点开查看节日心意</div>
+                <div class="who">圣诞节</div>
+                <div class="what">12 月 25 日</div>
               </div>
-              <div class="days"><b>58</b><span>天后</span></div>
+              <span class="fav-star"><svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.3l6.1-.7z"/></svg></span>
+              <span class="pill">还有 56 天</span>
+            </div>
+
+            <div class="pc-row">
+              <div class="stamp tone-night">元</div>
+              <div class="mid">
+                <div class="who">元旦</div>
+                <div class="what">1 月 1 日</div>
+              </div>
+              <span class="fav-star"><svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.3l6.1-.7z"/></svg></span>
+              <span class="pill">还有 62 天</span>
+            </div>
+
+            <div class="pc-row">
+              <div class="stamp tone-night">情</div>
+              <div class="mid">
+                <div class="who">情人节</div>
+                <div class="what">2 月 14 日</div>
+              </div>
+              <span class="fav-star"><svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.3l6.1-.7z"/></svg></span>
+              <span class="pill">还有 107 天</span>
             </div>
           </div>
           <div class="tabbar">
-            <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>首页<span class="tab-dot"></span></a>
-            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>收藏<span class="tab-dot"></span></a>
+            <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>提醒<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>联系人<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>历史<span class="tab-dot"></span></a>
             <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>设置<span class="tab-dot"></span></a>
           </div>
         </div>
       </div>
-      <div class="cap"><b>首页</b>　三个标签页之一。列出生日、各纪念日与六个内置节日；每条标明对象、日子名称、剩余天数。日子当天用蜜蜡色圆点与角标提示（spec 所称"红点"在本视觉体系中落为蜜蜡色）。</div>
+      <div class="cap"><b>提醒 Tab（F5）</b>　四段：①「下一位」主卡——当年祝福与礼物快照都生成后才盖印泥红"已备好"邮戳（D20），未生成时邮戳位留白；②进入提醒窗口的生日与纪念日，按临近排序；③已关注的通用节日长期倒计时。点星标可就地取关，取关后该节日立即从本区消失、不再推送（F11，星标为示意形态，最终交互属待拍板项）。不放人员管理入口，也没有蓝色齿轮悬浮钮。</div>
     </div>
 
-    <!-- 人员列表 -->
+    <!-- 联系人 Tab -->
     <div class="frame">
       <div class="phone">
         <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
@@ -506,7 +575,7 @@ body{
           <div class="scroll">
             <div class="apphdr">
               <div>
-                <div class="greet" style="font-size:21px">‹　惦记的人</div>
+                <div class="greet">联系人</div>
                 <div class="sub">共 4 位 · 允许重名，以关系标签区分</div>
               </div>
             </div>
@@ -516,9 +585,15 @@ body{
             <div class="pickrow"><div class="ava night">张</div><div class="pm"><div class="pn">张伟 <span class="reltag">客户</span></div><div class="ps">生日 12 月 1 日 · 提前 5 天单独提醒</div></div><span class="chev">›</span></div>
             <div class="pickrow"><div class="ava">陈</div><div class="pm"><div class="pn">陈叔 <span class="reltag">其他</span></div><div class="ps">生日 10 月 28 日 · 未填写特征</div></div><span class="chev">›</span></div>
           </div>
+          <div class="tabbar">
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>提醒<span class="tab-dot"></span></a>
+            <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>联系人<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>历史<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>设置<span class="tab-dot"></span></a>
+          </div>
         </div>
       </div>
-      <div class="cap"><b>人员列表</b>　从首页"人员添加与管理"进入。点入查看/修改；删除在编辑页内，带二次确认。</div>
+      <div class="cap"><b>联系人 Tab（D15）</b>　全部人员的管理入口。点入查看/修改；添加与删除（编辑页内，带二次确认）都在此 Tab，不再有二级人员列表路由。</div>
     </div>
 
     <!-- 添加/编辑人员 -->
@@ -595,7 +670,7 @@ body{
           </div>
         </div>
       </div>
-      <div class="cap"><b>删除二次确认</b>（spec 第 2 条）　明确告知收藏与往年记录一并删除；确认后该人不再出现在任何列表、推送、收藏夹或回顾中。</div>
+      <div class="cap"><b>删除二次确认</b>（spec 第 2 条）　明确告知收藏与往年记录一并删除；确认后该人不再出现在提醒、联系人、推送中；其收藏与已送出记录一并删除。</div>
     </div>
   </div>
 
@@ -702,6 +777,9 @@ body{
     <div class="sv"><b>无网络且尚未生成：</b>祝福区与礼物区显示"需要网络"，并提供「手动重试」按钮；已生成的快照不受影响，可离线完整查看。</div>
     <div class="sv"><b>连续 3 次生成失败：</b>祝福区给出一组不针对个人的通用兜底文案；网络恢复后可「重新生成」覆盖兜底内容。</div>
     <div class="sv"><b>一条特征都没填：</b>仍正常生成"通用但真诚"版本，详情提示"补充 TA 的特征可让祝福更贴合"，并提供前往编辑档案的入口。</div>
+    <div class="sv"><b>节日取关（F11）：</b>在提醒页节日区就地取关后，该节日立即从倒计时区消失、不再推送，也无法进入节日心意；重新关注后恢复，不溯及历史——已收藏与已送出的该节日内容仍保留在历史 Tab。</div>
+    <div class="sv"><b>主卡未就绪：</b>当年祝福与礼物快照尚未都生成时，「下一位」主卡不盖"已备好"印泥红邮戳，邮戳位留白；两项均生成后邮戳自动出现（贺卡仅锦上添花，不作就绪条件）。</div>
+    <div class="sv"><b>历史空状态：</b>从未标记"已送出"时，历史 Tab 的已送出分区显示空状态插画与说明；收藏分区为空时同理。</div>
   </div>
 
   <div class="flow" style="margin-top:56px"><span class="seq">伍</span><h2>三样心意 · 电子贺卡与往年回顾</h2><span>进入详情即自动组合好，无单独「生成」按钮</span></div>
@@ -801,28 +879,84 @@ body{
           </div>
         </div>
       </div>
-      <div class="cap"><b>节日选人页</b>　首页节日条目与节日推送进入。可不选人直接看通用版；未录入任何人时也能进通用版，不出现空白页。</div>
+      <div class="cap"><b>节日选人页</b>　提醒页节日条目与节日推送进入（仅已关注节日可进入，F11）。可不选人直接看通用版；未录入任何人时也能进通用版，不出现空白页。</div>
     </div>
   </div>
 
-  <!-- ============ 流程六：收藏 / 设置 / 账号 ============ -->
-  <div class="flow"><span class="seq">陆</span><h2>收藏、设置与账号</h2><span>好心意逐年沉淀；登录可选，未登录先用本机</span></div>
+  <!-- ============ 流程六：历史 / 设置 / 账号 ============ -->
+  <div class="flow"><span class="seq">陆</span><h2>历史、设置与账号</h2><span>已送出流水与收藏同在历史 Tab（D19、F17）；登录可选，未登录先用本机</span></div>
   <div class="frames">
 
-    <!-- 收藏 -->
+    <!-- 历史 Tab · 已送出流水（F17） -->
     <div class="frame">
       <div class="phone">
         <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
         <div class="screen">
           <div class="scroll">
             <div class="apphdr">
-              <div><div class="greet">收藏夹</div><div class="sub">保存的是收藏那一刻的完整内容，可离线再用</div></div>
+              <div><div class="greet">历史</div><div class="sub">送出的心意与收藏，都在这里</div></div>
             </div>
+            <div class="seg"><a class="on">已送出</a><a>收藏</a></div>
+
+            <div class="pickrow">
+              <div class="sent-mark"><b>26</b><em>已送</em></div>
+              <div class="pm">
+                <div class="pn">陈叔的生日 <span class="reltag">2026</span></div>
+                <div class="ps">10 月 28 日送出 · 祝福 · 贺卡</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="pickrow">
+              <div class="sent-mark"><b>26</b><em>已送</em></div>
+              <div class="pm">
+                <div class="pn">妈妈 · 母亲节 <span class="reltag">2026</span></div>
+                <div class="ps">5 月 12 日送出 · 祝福 · 礼物 · 贺卡</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="pickrow">
+              <div class="sent-mark"><b>25</b><em>已送</em></div>
+              <div class="pm">
+                <div class="pn">张伟的生日 <span class="reltag">2025</span></div>
+                <div class="ps">12 月 1 日送出 · 祝福 · 礼物</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="pickrow">
+              <div class="sent-mark"><b>25</b><em>已送</em></div>
+              <div class="pm">
+                <div class="pn">老王的生日 <span class="reltag">2025</span></div>
+                <div class="ps">5 月 9 日送出 · 祝福</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+          </div>
+          <div class="tabbar">
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>提醒<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>联系人<span class="tab-dot"></span></a>
+            <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>历史<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>设置<span class="tab-dot"></span></a>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>历史 Tab · 已送出流水（F17）</b>　标记"已送出"后在此留痕：跨所有人、所有年份按标记时间倒序聚合，标明谁的什么日子、哪一年、实际送出了哪几类内容；点按回看当年快照（祝福/礼物/贺卡的历史内容）。图中行形态为示意，最终标记粒度与行字段开工前由开发者拍板；从未送出过则显示空状态。</div>
+    </div>
+
+    <!-- 历史 Tab · 收藏分区 -->
+    <div class="frame">
+      <div class="phone">
+        <div class="statusbar"><span>9:00</span><span class="sb-icons"></span></div>
+        <div class="screen">
+          <div class="scroll">
+            <div class="apphdr">
+              <div><div class="greet">历史</div><div class="sub">保存的是收藏那一刻的完整内容，可离线再用</div></div>
+            </div>
+            <div class="seg"><a>已送出</a><a class="on">收藏</a></div>
             <div class="chips" style="margin-bottom:14px">
               <span class="chip on">全部</span><span class="chip">祝福</span><span class="chip">礼物</span><span class="chip">贺卡</span>
             </div>
 
-            <div style="display:flex;align-items:center;gap:8px;margin:0 2px 8px"><span class="typetag bless">祝福</span><span class="hint" style="margin:0">为 妈妈 · 生日 收藏</span></div>
+            <div style="display:flex;align-items:center;gap:8px;margin:0 2px 8px"><span class="typetag bless">祝福</span><span class="hint" style="margin:0">为 妈妈 · 生日 收藏</span><span class="sent-mark" style="width:30px;height:30px;margin-left:auto"><b style="font-size:12px">藏</b></span></div>
             <div class="letter" style="margin-bottom:14px">
               <p>这一年你终于把时间还给了自己：花越养越好，日子也越过越松快。生日快乐，我常回家。</p>
               <div class="acts"><button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>复制</button><button class="iconbtn saved"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>取消收藏</button></div>
@@ -843,13 +977,14 @@ body{
             </div>
           </div>
           <div class="tabbar">
-            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>首页<span class="tab-dot"></span></a>
-            <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>收藏<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>提醒<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>联系人<span class="tab-dot"></span></a>
+            <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>历史<span class="tab-dot"></span></a>
             <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>设置<span class="tab-dot"></span></a>
           </div>
         </div>
       </div>
-      <div class="cap"><b>收藏</b>　祝福 / 礼物 / 贺卡三类清晰区分，标明为谁、为什么日子收藏；祝福复制、礼物「去看看」、贺卡导出图片。</div>
+      <div class="cap"><b>历史 Tab · 收藏分区（D19）</b>　与「已送出」并列的第二个分区。祝福 / 礼物 / 贺卡三类清晰区分，标明为谁、为什么日子收藏；祝福复制、礼物「去看看」、贺卡导出图片。</div>
     </div>
 
     <!-- 设置 -->
@@ -886,27 +1021,21 @@ body{
               <div class="setrow"><div class="s-mid"><div class="s-name">张伟 <span class="reltag">客户</span></div><div class="s-sub">提前 5 天 · 单独覆盖</div></div><span class="toggle on"></span></div>
             </div>
 
-            <div class="panel-name">通用节日提醒（节日统一使用全局天数）</div>
-            <div class="cardpanel">
-              <div class="setrow"><div class="s-mid"><div class="s-name">圣诞节</div><div class="s-sub">关闭后不推送，仍出现在首页、可查看节日心意</div></div><span class="toggle"></span></div>
-              <div class="setrow"><div class="s-mid"><div class="s-name">感恩节</div></div><span class="toggle on"></span></div>
-              <div class="setrow" style="border:none"><button class="linkbtn">其余四个节日（元旦 / 情人节 / 母亲节 / 父亲节）</button></div>
-            </div>
-
             <div class="panel-name">账号与说明</div>
             <div class="cardpanel">
-              <div class="setrow"><div class="s-mid"><div class="s-name">登录</div><div class="s-sub">邮箱验证码登录，登录后数据保存到云端</div></div><span class="chev">›</span></div>
+              <div class="setrow"><div class="s-mid"><div class="s-name">登录</div><div class="s-sub">邮箱密码登录，登录后数据保存到云端</div></div><span class="chev">›</span></div>
               <div class="setrow" style="border:none"><div class="s-mid"><div class="s-name">服务说明</div><div class="s-sub">AI 信息用途与账号数据说明</div></div><span class="chev">›</span></div>
             </div>
           </div>
           <div class="tabbar">
-            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>首页<span class="tab-dot"></span></a>
-            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 4h10v17l-5-3.5L7 21z"/></svg>收藏<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>提醒<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>联系人<span class="tab-dot"></span></a>
+            <a class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>历史<span class="tab-dot"></span></a>
             <a class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>设置<span class="tab-dot"></span></a>
           </div>
         </div>
       </div>
-      <div class="cap"><b>设置</b>　全局提前天数、送达钟点、祝福条数、单人覆盖与开关、单节日开关；不提供按单个日子的设置。登录入口与常驻「服务说明」。</div>
+      <div class="cap"><b>设置</b>　全局提前天数、送达钟点、祝福条数、单人覆盖与开关；不提供按单个日子、单个节日的设置——节日关注/取关在提醒页节日区就地操作（F11）。登录入口与常驻「服务说明」。</div>
     </div>
 
     <!-- 服务说明 -->
@@ -923,7 +1052,7 @@ body{
                 <h4>生成一次，当年固定</h4>
                 <p>每个人 × 日子 × 年份的内容只在首次需要时生成一次，随后作为当年快照固定。修改资料或调整条数后不会自动变化，需在心意详情手动「重新生成」。</p>
                 <h4>账号与云端</h4>
-                <p>登录为可选项。未登录时所有数据只保存在本机，卸载应用或更换手机会丢失；使用邮箱验证码登录后，人员档案、纪念日、特征、快照、贺卡状态、收藏与往年记录保存到云端，换机登录同一账号后仍可查看。</p>
+                <p>登录为可选项。未登录时所有数据只保存在本机，卸载应用或更换手机会丢失；使用邮箱和密码登录后，人员档案、纪念日、特征、快照、贺卡状态、收藏与往年记录保存到云端，换机登录同一账号后仍可查看。忘记密码可通过邮件重置。</p>
                 <h4>离线时</h4>
                 <p>已生成的内容无网络时仍可完整查看；新内容的生成需要网络，无法生成时页面会明确提示并提供手动重试。</p>
               </div>
@@ -945,28 +1074,26 @@ body{
             </div>
             <div style="text-align:center;margin:14px 0 26px">
               <div style="font-family:var(--serif);font-size:24px;font-weight:600">登录心意管家</div>
-              <div class="sub" style="font-size:12.5px;color:var(--ink-soft);margin-top:8px;line-height:1.9">用邮箱验证码登录。<br>不登录也能完整使用，数据先保存在本机。</div>
+              <div class="sub" style="font-size:12.5px;color:var(--ink-soft);margin-top:8px;line-height:1.9">用邮箱和密码登录。<br>不登录也能完整使用，数据先保存在本机。</div>
             </div>
             <div class="field"><label>邮箱</label><input class="input" placeholder="name@example.com"></div>
             <div class="field">
-              <label>验证码</label>
-              <div style="display:flex;gap:10px">
-                <input class="input" placeholder="6 位验证码" style="flex:1">
-                <a class="btn btn-ghost btn-sm" style="white-space:nowrap">获取验证码</a>
-              </div>
+              <label>密码</label>
+              <input class="input" placeholder="请输入密码">
+              <button class="linkbtn" style="text-align:right;padding:0;margin-top:8px;font-size:12.5px">忘记密码？</button>
             </div>
             <a class="btn btn-pine btn-block" style="margin-top:10px">登录</a>
             <div class="login-note">登录后，人员档案、快照、贺卡状态、收藏与往年记录<br>保存到云端；更换手机登录同一账号，数据仍在。<br>登录态持续保持，可随时退出登录。</div>
           </div>
         </div>
       </div>
-      <div class="cap"><b>登录页</b>（spec 第 14 条 · plan 阶段 10）　Supabase 邮箱验证码登录；登录可选。已登录后此处变为账号信息与「退出登录」。</div>
+      <div class="cap"><b>登录页</b>（spec 第 14 条 · plan 阶段 10）　Supabase 邮箱 + 密码登录，忘记密码走邮件重置；登录可选。已登录后此处变为账号信息与「退出登录」。</div>
     </div>
   </div>
 
   <div class="foot-note">
     AI 心意管家 · 第一版静态原型（Android · React Native + Expo）<br>
-    页面与字段均对应 plan.md / data-model.md；标签页固定为：首页 · 收藏 · 设置。
+    页面与字段均对应 plan.md / data-model.md；标签页固定为：提醒 · 联系人 · 历史 · 设置（D15/D19/D20）。
   </div>
 </div>
 </body>

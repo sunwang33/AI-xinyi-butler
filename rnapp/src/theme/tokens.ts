@@ -25,6 +25,10 @@ export const colors = {
   honey: '#C98F3D',
   honeyDeep: '#A9732C',
   honeyWash: '#F2E6CE',
+  /** 印泥红：D20 邮戳印章专用（收藏 / 已送出 / 主卡已就绪三态） */
+  seal: '#B0493B',
+  sealDeep: '#963A2E',
+  sealWash: '#F7E9E5',
   /** 月夜模板深青（非黑） */
   night: '#23453F',
   /** 卡片描边 */
