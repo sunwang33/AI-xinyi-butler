@@ -12,21 +12,45 @@
  */
 import * as Notifications from 'expo-notifications';
 import { AndroidImportance, SchedulableTriggerInputTypes } from 'expo-notifications';
-import type { NotificationRequest, Subscription } from 'expo-notifications';
+import type { DateTriggerInput, NotificationRequest, Subscription } from 'expo-notifications';
 
 /** 全部提醒通知使用的 Android 渠道 ID（scheduler 调度时需带上同一 channelId） */
 export const ANDROID_CHANNEL_ID = 'reminders';
 
 /**
+ * 自定义渠道是否可用。Expo Go 自 SDK 53 起不支持 setNotificationChannelAsync
+ * （调用直接抛错），但其本地通知仍可经系统默认渠道投递；dev/正式 build 渠道正常。
+ */
+let channelAvailable = true;
+
+/**
  * 创建/更新提醒渠道。setNotificationChannelAsync 幂等：渠道已存在时按配置更新，
- * 重复调用不会报错；非 Android 平台为无操作。
+ * 重复调用不会报错；非 Android 平台为无操作。渠道 API 不可用（Expo Go）时只标记
+ * 降级并告警，绝不抛错——提醒初始化的权限申请、监听注册与调度都不得被它阻断。
  */
 export async function ensureNotificationChannel(): Promise<void> {
-  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-    name: '提醒',
-    // HIGH 可在屏幕顶部弹出 heads-up 通知
-    importance: AndroidImportance.HIGH,
-  });
+  try {
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+      name: '提醒',
+      // HIGH 可在屏幕顶部弹出 heads-up 通知
+      importance: AndroidImportance.HIGH,
+    });
+  } catch (error) {
+    channelAvailable = false;
+    console.warn(
+      '[reminders] 自定义通知渠道不可用（Expo Go 环境属预期），本地通知改走系统默认渠道',
+      error,
+    );
+  }
+}
+
+/** 组装 Android 一次性时刻触发器：自定义渠道可用时带上 channelId，否则走默认渠道 */
+function dateTrigger(date: Date): DateTriggerInput {
+  return {
+    type: SchedulableTriggerInputTypes.DATE,
+    date,
+    ...(channelAvailable ? { channelId: ANDROID_CHANNEL_ID } : {}),
+  };
 }
 
 /**
@@ -77,11 +101,7 @@ export async function scheduleLocalNotification(
 ): Promise<string> {
   return Notifications.scheduleNotificationAsync({
     content,
-    trigger: {
-      type: SchedulableTriggerInputTypes.DATE,
-      date,
-      channelId: ANDROID_CHANNEL_ID,
-    },
+    trigger: dateTrigger(date),
   });
 }
 
@@ -94,11 +114,7 @@ export async function scheduleLocalNotification(
 export async function presentLocalNotification(content: LocalNotificationContent): Promise<string> {
   return Notifications.scheduleNotificationAsync({
     content,
-    trigger: {
-      type: SchedulableTriggerInputTypes.DATE,
-      date: new Date(Date.now() + 1000),
-      channelId: ANDROID_CHANNEL_ID,
-    },
+    trigger: dateTrigger(new Date(Date.now() + 1000)),
   });
 }
 
