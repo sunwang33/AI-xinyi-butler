@@ -373,6 +373,10 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+[functions.generate-content]
+# M6 T30 / M7 T36：匿名（anon key）可调用；网关先校验 JWT 再进函数，函数内另有按 IP 基本限频
+verify_jwt = true
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

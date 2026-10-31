@@ -1,0 +1,11 @@
+{
+  "kind": "blessing",
+  "count": 11,
+  "occasion": { "type": "birthday" },
+  "person": {
+    "relation": "家人",
+    "traits": [],
+    "salutation": null,
+    "signature": null
+  }
+}

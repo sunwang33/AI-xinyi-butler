@@ -1,13 +1,13 @@
 /**
- * 心意详情（plan 3.1 /occasion-detail，T25 页壳）
+ * 心意详情（plan 3.1 /occasion-detail）
  * query：kind=birthday|anniversary|festival（必填）、personId（节日通用版可空）、
  *       anniversaryId（anniversary 必填）、festivalCode（festival 必填，六代号之一）、
  *       year（必填整数，设备本地年份）。
- * 本轮只搭壳：标题区 + 祝福 / 礼物建议 / 电子贺卡三分区占位 + 底部往年记录区位；
- * 祝福区先放「需要网络」提示与「手动重试」占位按钮，内容由 M6 之后逐段填满。
- * 通用版节日（kind=festival 且无 personId）只含祝福与贺卡，不渲染礼物分区。
+ * M6/M7：祝福分区（告知门禁、生成、当年快照、复制、重试、重新生成）、
+ *        礼物分区（不少于五个、去看看跳电商搜索）；通用版节日只含祝福与贺卡。
+ * 电子贺卡、往年记录仍为占位，由后续里程碑填充。
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Button, Card, EmptyState, PageHeader, Screen } from '../src/components';
@@ -15,15 +15,19 @@ import { getRepository } from '../src/data/repository';
 import {
   FESTIVAL_CODES,
   OCCASION_TYPES,
+  type AiConsent,
   type Anniversary,
   type FestivalCode,
   type OccasionType,
   type Person,
+  type Trait,
 } from '../src/data/entities';
-// T15（M4-A，并行开发）提供六个内置节日常量表 FESTIVALS（含固定中文展示名）；
-// 该模块落地前 typecheck 会报找不到本模块，属并行预期，本文件不自建节日映射。
 import { FESTIVALS } from '../src/features/occasions/festivals';
-import { colors, fonts, fontSize, radius, spacing } from '../src/theme/tokens';
+import { BlessingSection } from '../src/features/content/BlessingSection';
+import { GiftSection } from '../src/features/content/GiftSection';
+import { buildContentContext } from '../src/features/content/context';
+import { ConsentSheet } from '../src/features/consent/ConsentSheet';
+import { colors, fonts, fontSize, spacing } from '../src/theme/tokens';
 
 /** 校验通过后的日子定位参数 */
 interface OccasionParams {
@@ -96,7 +100,7 @@ function parseParams(raw: Record<string, string | string[] | undefined>): Occasi
   };
 }
 
-/** 分区卡片：宋体小标题 + 内容（各分区内容 M6–M11 填充） */
+/** 分区卡片：宋体小标题 + 内容（贺卡 / 往年记录占位继续用） */
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Card>
@@ -115,6 +119,15 @@ function SectionNote({ children }: { children: ReactNode }) {
   );
 }
 
+/** 标题区所需的档案资料与设置（本轮起含特征、祝福条数、AI 告知状态） */
+interface HeaderData {
+  person: Person | null;
+  anniversary: Anniversary | null;
+  traits: Trait[];
+  blessingCount: number;
+  consent: AiConsent;
+}
+
 export default function OccasionDetailScreen() {
   const router = useRouter();
   const rawParams = useLocalSearchParams();
@@ -125,19 +138,17 @@ export default function OccasionDetailScreen() {
   const queryKind = params?.kind ?? null;
   const queryPersonId = params?.personId ?? null;
   const queryAnniversaryId = params?.anniversaryId ?? null;
+  const queryFestivalCode = params?.festivalCode ?? null;
+  const queryYear = params?.year ?? null;
   // 当前查询的唯一标识；读取结果带上 key，query 变化期间自然呈现加载态
-  const headerKey = `${queryKind ?? ''}|${queryPersonId ?? ''}|${queryAnniversaryId ?? ''}`;
+  const headerKey = `${queryKind ?? ''}|${queryPersonId ?? ''}|${queryAnniversaryId ?? ''}|${queryFestivalCode ?? ''}|${queryYear ?? ''}`;
 
-  // 标题区所需资料（只读 person / anniversary；本轮不读快照），按 headerKey 对应
-  const [headerEntry, setHeaderEntry] = useState<{
-    key: string;
-    data: { person: Person | null; anniversary: Anniversary | null };
-  } | null>(null);
+  const [headerEntry, setHeaderEntry] = useState<{ key: string; data: HeaderData } | null>(null);
   // 读取失败时记录是哪个 query 失败的
   const [failedKey, setFailedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!queryKind) {
+    if (!queryKind || queryYear === null) {
       return;
     }
     let active = true;
@@ -145,13 +156,24 @@ export default function OccasionDetailScreen() {
       .then(async (repo) => {
         // 称呼取 salutation，未填用 name；通用版节日不取人
         const person = queryPersonId ? await repo.getPerson(queryPersonId) : null;
+        const traits = queryPersonId ? await repo.listTraits(queryPersonId) : [];
         let anniversary: Anniversary | null = null;
         if (queryKind === 'anniversary' && queryPersonId) {
           const list = await repo.listAnniversaries(queryPersonId);
           anniversary = list.find((item) => item.id === queryAnniversaryId) ?? null;
         }
+        const settings = await repo.getSettings();
         if (active) {
-          setHeaderEntry({ key: headerKey, data: { person, anniversary } });
+          setHeaderEntry({
+            key: headerKey,
+            data: {
+              person,
+              anniversary,
+              traits,
+              blessingCount: settings.blessingCount,
+              consent: settings.aiConsent,
+            },
+          });
         }
       })
       .catch(() => {
@@ -163,17 +185,55 @@ export default function OccasionDetailScreen() {
     return () => {
       active = false;
     };
-  }, [queryKind, queryPersonId, queryAnniversaryId, headerKey]);
+  }, [queryKind, queryPersonId, queryAnniversaryId, headerKey, queryYear]);
 
   // 仅当已取到的数据属于当前 query 时才采用，否则视为加载中
   const header = headerEntry && headerEntry.key === headerKey ? headerEntry.data : null;
   const loadFailed = failedKey === headerKey;
 
-  // 手动重试占位：T25 壳阶段不绑真实逻辑、不发起网络请求、不写任何数据。
-  // TODO(M6)：T31 在此接入祝福快照生成——T28 首次 AI 告知同意后调用 T30 Edge Function，
-  // 按「人 × 日子 × 年份」写 content_snapshots.blessings 当年固定；
-  // 无网络 / 失败重试与连续 3 次通用兜底见 T34；T32/T33 补展示复制与重新生成。
-  const handleRetryBlessings = () => {};
+  // ---- T28 首次 AI 生成告知门禁 ----
+  // 同意状态以读取到的设置值为准；本页内同意 / 拒绝用 override 即时覆盖，
+  // 不在 effect 里回写 state（避免级联渲染）
+  const [consentOverride, setConsentOverride] = useState<AiConsent | null>(null);
+  const consent: AiConsent | null = header ? (consentOverride ?? header.consent) : null;
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [agreeBusy, setAgreeBusy] = useState(false);
+  const pendingActionRef = useRef<(() => void) | null>(null);
+
+  /** 未同意先弹告知；同意后直接执行 */
+  const ensureConsent = useCallback(
+    (action: () => void) => {
+      if (consent === 'agreed') {
+        action();
+        return;
+      }
+      pendingActionRef.current = action;
+      setSheetVisible(true);
+    },
+    [consent],
+  );
+
+  const onAgree = async () => {
+    setAgreeBusy(true);
+    try {
+      const repo = await getRepository();
+      const settings = await repo.updateSettings({ aiConsent: 'agreed' });
+      setConsentOverride(settings.aiConsent);
+      setSheetVisible(false);
+      pendingActionRef.current?.();
+      pendingActionRef.current = null;
+    } finally {
+      setAgreeBusy(false);
+    }
+  };
+
+  const onDecline = async () => {
+    const repo = await getRepository();
+    const settings = await repo.updateSettings({ aiConsent: 'declined' });
+    setConsentOverride(settings.aiConsent);
+    setSheetVisible(false);
+    pendingActionRef.current = null;
+  };
 
   // ---- 参数非法：友好错误态 + 返回按钮 ----
   if (!params) {
@@ -198,6 +258,7 @@ export default function OccasionDetailScreen() {
       : params.kind === 'anniversary'
         ? (header?.anniversary?.name ?? '纪念日')
         : (FESTIVALS.find((f) => f.code === params.festivalCode)?.name ?? '节日');
+  const festivalName = params.kind === 'festival' ? occasionName : null;
 
   const isGenericFestival = params.kind === 'festival' && !params.personId;
   // 通用版节日无称呼；取不到 person 记录（如已删除）时以「TA」兜底
@@ -225,7 +286,7 @@ export default function OccasionDetailScreen() {
     );
   }
 
-  if (!header) {
+  if (!header || consent === null) {
     return (
       <Screen scroll>
         <PageHeader title="心意详情" />
@@ -236,6 +297,24 @@ export default function OccasionDetailScreen() {
     );
   }
 
+  // 快照业务键与云函数入参
+  const occasionKey = {
+    occasionType: params.kind,
+    personId: params.personId,
+    anniversaryId: params.anniversaryId,
+    festivalCode: params.festivalCode,
+    year: params.year,
+  };
+  const contentContext = buildContentContext({
+    occasionType: params.kind,
+    person: header.person,
+    traits: header.traits,
+    anniversary: header.anniversary,
+    festivalName,
+    festivalCode: params.festivalCode ?? undefined,
+    year: params.year,
+  });
+
   return (
     <Screen scroll>
       <PageHeader title={headerTitle} />
@@ -244,37 +323,26 @@ export default function OccasionDetailScreen() {
       </View>
 
       <View style={{ gap: spacing.lg }}>
-        {/* 分区一：祝福（M6 填内容）。本轮无快照，按 spec 第 8 条先展示「需要网络」提示与手动重试占位 */}
-        <SectionCard title="祝福">
-          <View
-            style={{
-              borderWidth: 1,
-              borderStyle: 'dashed',
-              borderColor: colors.sage,
-              borderRadius: radius.md,
-              backgroundColor: colors.paperDim,
-              padding: spacing.lg,
-              gap: spacing.xs,
-            }}
-          >
-            <Text style={{ fontFamily: fonts.sansMedium, fontSize: fontSize.base, color: colors.pineDeep }}>
-              需要网络
-            </Text>
-            <SectionNote>祝福还没生成，联网后会在这里自动准备好；现在没网，也可以点下方按钮手动重试。</SectionNote>
-            <View style={{ marginTop: spacing.sm, flexDirection: 'row' }}>
-              <Button title="手动重试" variant="ghost" size="sm" onPress={handleRetryBlessings} />
-            </View>
-          </View>
-        </SectionCard>
+        {/* 分区一：祝福（M6） */}
+        <BlessingSection
+          occasionKey={occasionKey}
+          context={contentContext}
+          consent={consent}
+          blessingCount={header.blessingCount}
+          festivalName={festivalName}
+          personId={params.personId}
+          ensureConsent={ensureConsent}
+        />
 
-        {/* 分区二：礼物建议（M7 / T37、T38 填充：不少于五个建议、「为什么适合 TA」与「去看看」）。
-            spec 第 7 条：通用版节日只含祝福与贺卡，故此处不渲染礼物分区。 */}
+        {/* 分区二：礼物建议（M7）。spec 第 7 条：通用版节日只含祝福与贺卡，不渲染礼物分区 */}
         {!isGenericFestival ? (
-          <SectionCard title="礼物建议">
-            <SectionNote>
-              礼物建议稍后上线。届时这里会列出不少于五个建议，每条都会说明为什么适合 TA，并可一键「去看看」。
-            </SectionNote>
-          </SectionCard>
+          <GiftSection
+            occasionKey={occasionKey}
+            context={contentContext}
+            consent={consent}
+            festivalName={festivalName}
+            ensureConsent={ensureConsent}
+          />
         ) : null}
 
         {/* 分区三：电子贺卡（M9 / T44–T46 填充：进入即自动组合、模板切换、祝福切换与编辑、导出图片） */}
@@ -288,6 +356,13 @@ export default function OccasionDetailScreen() {
           <SectionNote>今年是第一次</SectionNote>
         </SectionCard>
       </View>
+
+      <ConsentSheet
+        visible={sheetVisible}
+        busy={agreeBusy}
+        onAgree={onAgree}
+        onDecline={onDecline}
+      />
     </Screen>
   );
 }

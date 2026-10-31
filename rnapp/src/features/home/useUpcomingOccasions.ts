@@ -16,9 +16,20 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { getRepository } from '../../data/repository';
-import type { Anniversary, FestivalCode } from '../../data/entities';
+import type { Anniversary, FestivalCode, OccasionKey } from '../../data/entities';
 import { listFollowedFestivals, listUpcoming } from '../occasions/engine';
 import type { OccasionHit } from '../occasions/engine';
+
+/** 「心意已就绪」判定键（与 content_snapshots 业务键同构） */
+export function occasionReadyKey(key: OccasionKey): string {
+  return [
+    key.personId ?? '',
+    key.occasionType,
+    key.anniversaryId ?? '',
+    key.festivalCode ?? '',
+    key.year,
+  ].join('|');
+}
 
 export interface UpcomingOccasionsState {
   /** 首次加载未完成时为 true；聚焦刷新期间不回到加载态 */
@@ -29,6 +40,8 @@ export interface UpcomingOccasionsState {
   festivalHits: OccasionHit[];
   /** 六个内置节日中当前已关注的个数（0–6，节日区「已关注 N 个」与全取关空态用） */
   followedCount: number;
+  /** 当年祝福与礼物快照均已生成的日子键集合（D20 主卡「心意已就绪」邮戳） */
+  readyKeys: ReadonlySet<string>;
   /** 已加载完成且没有任何在档人员 */
   personsEmpty: boolean;
   /** Repository 读取异常时为 true，调用方展示失败态与「重试」 */
@@ -53,6 +66,7 @@ export function useUpcomingOccasions(): UpcomingOccasionsState {
   const [personHits, setPersonHits] = useState<OccasionHit[]>([]);
   const [festivalHits, setFestivalHits] = useState<OccasionHit[]>([]);
   const [followedCount, setFollowedCount] = useState(6);
+  const [readyKeys, setReadyKeys] = useState<ReadonlySet<string>>(new Set());
   const [personsEmpty, setPersonsEmpty] = useState(false);
   const [error, setError] = useState(false);
 
@@ -82,24 +96,38 @@ export function useUpcomingOccasions(): UpcomingOccasionsState {
           .filter((item) => item.disabled)
           .map((item) => item.festivalCode);
         const today = formatTodayLocal();
+        // 人员日子：30 天窗口且不含节日
+        const nextPersonHits = listUpcoming(today, persons, anniversaries, undefined, {
+          includeFestivals: false,
+        });
+        // D20：查每个人员日子的当年快照，祝福与礼物均已生成才算「心意已就绪」
+        const snapshots = await Promise.all(
+          nextPersonHits.map((hit) => repo.getSnapshot(hit)),
+        );
+        const nextReadyKeys = new Set<string>();
+        nextPersonHits.forEach((hit, index) => {
+          const snap = snapshots[index];
+          if (snap?.blessings?.length && snap.gifts?.length) {
+            nextReadyKeys.add(occasionReadyKey(hit));
+          }
+        });
         return {
           persons,
           followedCount: festivalSettings.filter((item) => !item.disabled).length,
-          // 人员日子：30 天窗口且不含节日
-          personHits: listUpcoming(today, persons, anniversaries, undefined, {
-            includeFestivals: false,
-          }),
+          personHits: nextPersonHits,
           // 通用节日：全部已关注节日的下一次发生，不受 30 天窗口限制
           festivalHits: listFollowedFestivals(today, disabledFestivalCodes),
+          readyKeys: nextReadyKeys,
         };
       })
-      .then(({ persons, personHits: nextPersonHits, festivalHits: nextFestivalHits, followedCount: nextFollowedCount }) => {
+      .then(({ persons, personHits: nextPersonHits, festivalHits: nextFestivalHits, followedCount: nextFollowedCount, readyKeys: nextReadyKeys }) => {
         if (!active) {
           return;
         }
         setPersonHits(nextPersonHits);
         setFestivalHits(nextFestivalHits);
         setFollowedCount(nextFollowedCount);
+        setReadyKeys(nextReadyKeys);
         setPersonsEmpty(persons.length === 0);
         setError(false);
         setLoading(false);
@@ -123,6 +151,7 @@ export function useUpcomingOccasions(): UpcomingOccasionsState {
     personHits,
     festivalHits,
     followedCount,
+    readyKeys,
     personsEmpty,
     error,
     reload: () => runLoad(true),

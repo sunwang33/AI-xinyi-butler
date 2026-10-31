@@ -1,0 +1,173 @@
+/**
+ * 心意详情 · 祝福分区（M6 T31–T34）。
+ * 状态：生成入口（未同意告知）/ 生成中 / 需要网络重试 / 内容（复制、重新生成、无特征提示、兜底提示）。
+ */
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { useRouter } from 'expo-router';
+import { Button, Card } from '../../components';
+import type { AiConsent, OccasionKey } from '../../data/entities';
+import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
+import type { ContentContext } from './types';
+import { useGeneratedContent } from './useGeneratedContent';
+import { BoxNote, BoxTitle, DashedBox, NoticeBar } from './SectionParts';
+
+export function BlessingSection({
+  occasionKey,
+  context,
+  consent,
+  blessingCount,
+  festivalName,
+  personId,
+  ensureConsent,
+}: {
+  occasionKey: OccasionKey;
+  context: ContentContext;
+  consent: AiConsent | null;
+  blessingCount: number;
+  festivalName: string | null;
+  /** 通用版节日为 null，不显示「去补充特征」 */
+  personId: string | null;
+  /** 未同意时先弹告知，同意后执行传入的生成动作 */
+  ensureConsent: (action: () => void) => void;
+}) {
+  const router = useRouter();
+  const state = useGeneratedContent('blessing', occasionKey, context, consent, {
+    count: blessingCount,
+    festivalName,
+  });
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+  const blessings = state.snapshot?.blessings ?? [];
+  const noTraits = personId !== null && context.person !== null && context.person.traits.length === 0;
+
+  const onCopy = async (text: string, index: number) => {
+    await Clipboard.setStringAsync(text);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex((cur) => (cur === index ? null : cur)), 1600);
+  };
+
+  return (
+    <Card>
+      <Text style={{ fontFamily: fonts.serif, fontSize: fontSize.title3, color: colors.ink }}>
+        祝福
+      </Text>
+
+      <View style={{ marginTop: spacing.md, gap: spacing.md }}>
+        {blessings.length > 0 ? (
+          <>
+            {state.fallbackUsed ? (
+              <NoticeBar>
+                网络暂时不给力，这里先展示通用祝福；联网后点「重新生成」可获取贴合 TA 的版本。
+              </NoticeBar>
+            ) : state.error ? (
+              // 已有内容时重新生成失败：旧内容保留（T34），但必须明确提示（spec 全局规则 3）
+              <NoticeBar>
+                {state.error.reason === 'ratelimit'
+                  ? '请求有点频繁，仍保留上次的祝福，请稍后再试。'
+                  : '网络暂时不给力，仍保留上次生成的祝福；联网后点「重新生成」再试。'}
+              </NoticeBar>
+            ) : null}
+
+            {blessings.map((text, index) => (
+              <View
+                key={index}
+                style={{
+                  backgroundColor: colors.paperDim,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  padding: spacing.md,
+                }}
+              >
+                <Text style={{ fontFamily: fonts.sans, fontSize: fontSize.base, lineHeight: 24, color: colors.ink }}>
+                  {text}
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.sm }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => onCopy(text, index)}
+                    style={({ pressed }) => ({
+                      borderWidth: 1,
+                      borderColor: colors.sage,
+                      borderRadius: radius.pill,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: 5,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Text style={{ fontFamily: fonts.sansMedium, fontSize: fontSize.small, color: colors.pineDeep }}>
+                      {copiedIndex === index ? '已复制' : '复制'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+
+            {noTraits ? (
+              <DashedBox>
+                <BoxTitle>让祝福更贴合 TA</BoxTitle>
+                <BoxNote>TA 还没有特征描述。补充爱好、近况、性格等特征后重新生成，祝福会更像专门写给 TA 的。</BoxNote>
+                <View style={{ marginTop: spacing.xs }}>
+                  <Button
+                    title="去补充特征"
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => router.push(`/persons/${personId}`)}
+                  />
+                </View>
+              </DashedBox>
+            ) : null}
+
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <Button
+                title="重新生成"
+                variant="ghost"
+                size="sm"
+                loading={state.busy}
+                // 撤回同意后重新生成必须重新过告知门禁（T28：未同意不发送任何信息）
+                onPress={() => ensureConsent(() => state.run())}
+              />
+            </View>
+          </>
+        ) : state.busy ? (
+          <View style={{ paddingVertical: spacing.lg, alignItems: 'center', gap: spacing.sm }}>
+            <ActivityIndicator color={colors.pine} />
+            <BoxNote>正在为 TA 准备祝福…</BoxNote>
+          </View>
+        ) : state.error || state.failedBefore ? (
+          <DashedBox>
+            <BoxTitle>需要网络</BoxTitle>
+            <BoxNote>
+              {state.error?.reason === 'ratelimit'
+                ? '请求有点频繁，请稍等一会儿再试。'
+                : '祝福还没生成成功。联网后点下方按钮重试；连续多次失败时，会先展示一组通用祝福。'}
+            </BoxNote>
+            <View style={{ marginTop: spacing.sm, flexDirection: 'row' }}>
+              <Button title="手动重试" variant="ghost" size="sm" onPress={() => ensureConsent(() => state.run())} />
+            </View>
+          </DashedBox>
+        ) : consent === 'agreed' ? (
+          <View style={{ paddingVertical: spacing.lg, alignItems: 'center' }}>
+            <ActivityIndicator color={colors.pine} />
+          </View>
+        ) : (
+          <DashedBox>
+            <BoxTitle>为 TA 准备祝福</BoxTitle>
+            <BoxNote>
+              由 AI 结合 TA 的关系、特征与这个日子拟好 {blessingCount} 条可以直接发送的文案。首次使用需要你确认信息发送说明。
+            </BoxNote>
+            <View style={{ marginTop: spacing.sm, flexDirection: 'row' }}>
+              <Button
+                title="生成祝福"
+                size="sm"
+                onPress={() => ensureConsent(() => state.run())}
+              />
+            </View>
+          </DashedBox>
+        )}
+      </View>
+    </Card>
+  );
+}

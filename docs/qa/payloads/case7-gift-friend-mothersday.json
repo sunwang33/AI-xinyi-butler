@@ -1,0 +1,10 @@
+{
+  "kind": "gift",
+  "occasion": { "type": "festival", "festivalName": "母亲节" },
+  "person": {
+    "relation": "挚友",
+    "traits": ["刚生完宝宝的新手妈妈", "每天靠咖啡提神", "喜欢宅家看剧"],
+    "salutation": "小琳",
+    "signature": null
+  }
+}

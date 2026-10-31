@@ -6,7 +6,7 @@ import { NextOccasionCard } from '../../src/features/home/NextOccasionCard';
 import { OccasionRow } from '../../src/features/home/OccasionRow';
 import { FestivalRow } from '../../src/features/home/FestivalRow';
 import { FestivalManageSheet } from '../../src/features/home/FestivalManageSheet';
-import { useUpcomingOccasions } from '../../src/features/home/useUpcomingOccasions';
+import { occasionReadyKey, useUpcomingOccasions } from '../../src/features/home/useUpcomingOccasions';
 import { formatTodayHeader } from '../../src/features/home/dateLabel';
 import { colors, fonts, fontSize, radius, spacing } from '../../src/theme/tokens';
 
@@ -115,7 +115,7 @@ function FestivalEmpty({
 
 export default function RemindScreen() {
   const router = useRouter();
-  const { loading, personHits, festivalHits, followedCount, personsEmpty, error, reload, refresh } =
+  const { loading, personHits, festivalHits, followedCount, readyKeys, personsEmpty, error, reload, refresh } =
     useUpcomingOccasions();
   // 节日管理 Sheet（重新关注的唯一入口）
   const [manageVisible, setManageVisible] = useState(false);
@@ -154,7 +154,7 @@ export default function RemindScreen() {
           {/* ①「下一位」主卡：只取人员日子（主卡是否可取节日 B 组未拍板，不提前实现） */}
           {next ? (
             <View style={{ marginBottom: spacing.sm }}>
-              <NextOccasionCard hit={next} />
+              <NextOccasionCard hit={next} ready={readyKeys.has(occasionReadyKey(next))} />
             </View>
           ) : null}
 
