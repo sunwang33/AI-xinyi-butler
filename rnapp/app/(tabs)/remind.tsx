@@ -14,8 +14,8 @@ import { colors, fonts, fontSize, radius, spacing } from '../../src/theme/tokens
  * 提醒 Tab（T65 返工，T66 接入 F11；spec 第 4/5 条 / 全局规则 5，原型 F5）：
  * 自上而下三段——①「下一位」主卡（最近一个生日/纪念日）；②提醒窗口（现 30 天口径，
  * 窗口大小 B 组待定）内的生日/纪念日列表，当天条目带蜜蜡点（见 OccasionRow）；
- * ③已关注通用节日倒计时区：行尾星标就地取关（确认后消失），标题「已关注 N 个」
- * 打开节日管理 Sheet（重新关注的唯一入口）；全部取关时给引导。
+ * ③已关注通用节日倒计时区：行尾星标就地取关（确认后消失），标题「已关注 N 个 · 管理 ›」
+ * 打开节日管理 Sheet（重新关注的唯一入口；管理字样为 2026-10-31 拍板的可点性增强）；全部取关时给引导。
  * 本页不放任何人员管理入口与完整人员名单（统一在联系人 Tab，D15）。
  * 三态：加载中骨架、读取失败错误态+重试；仅「完全没有人员档案」走整页引导空态
  * （跳联系人 Tab 添加）。有人员但窗口内无日子时不做空屏：近期日子区给空文案，
@@ -194,6 +194,7 @@ export default function RemindScreen() {
                 accessibilityLabel="管理节日关注"
                 hitSlop={8}
                 onPress={() => setManageVisible(true)}
+                style={{ flexDirection: 'row', alignItems: 'center' }}
               >
                 <Text
                   style={{
@@ -203,6 +204,16 @@ export default function RemindScreen() {
                   }}
                 >
                   已关注 {followedCount} 个
+                </Text>
+                {/* 「管理 ›」明示入口可点（真机反馈纯计数太隐蔽，2026-10-31 拍板方案 A） */}
+                <Text
+                  style={{
+                    fontFamily: fonts.sans,
+                    fontSize: fontSize.small,
+                    color: colors.pineDeep,
+                  }}
+                >
+                  {' · 管理 ›'}
                 </Text>
               </Pressable>
             }
