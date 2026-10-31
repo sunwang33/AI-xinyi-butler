@@ -45,8 +45,10 @@ import {
   ensureNotificationChannel,
   ensureNotificationPermission,
   getScheduledNotificationIds,
+  isExactAlarmGranted,
   isNotificationPermissionGranted,
   presentLocalNotification,
+  refreshExactAlarmStatusAsync,
   scheduleLocalNotification,
   setForegroundNotificationHandler,
   type LocalNotificationContent,
@@ -598,8 +600,38 @@ export async function refreshTodayBadge(): Promise<void> {
 let appStateListenerRegistered = false;
 
 /**
- * 回到前台时只刷新角标（不做全量重算，避免耗电）；模块级只注册一次。
- * 定时准点与后台策略待真机验收（plan 1.4）。
+ * 回前台精确闹钟刷新是否在进行中：连续多个 active（系统页返回可能触发多次）
+ * 只保留一次刷新，避免并发 enqueue 第二次全量重排（qa F3）。
+ */
+let exactAlarmForegroundInFlight = false;
+
+/**
+ * 回前台时刷新精确闹钟状态（T72）：仅当状态由非 granted 翻转为 granted
+ * （用户刚从系统「闹钟和提醒」设置授权回来）时全量重排，让已排通知升级为
+ * alarmClock 准点投递；前后值用模块内缓存布尔比对，其余情况不重算，避免耗电。
+ * 并发 active 经 in-flight 标记去重；任何异常（含重算失败）只告警，绝不冒泡。
+ */
+async function refreshExactAlarmOnForeground(): Promise<void> {
+  if (exactAlarmForegroundInFlight) {
+    return;
+  }
+  exactAlarmForegroundInFlight = true;
+  try {
+    const wasGranted = isExactAlarmGranted();
+    const status = await refreshExactAlarmStatusAsync();
+    if (!wasGranted && status === 'granted') {
+      await rescheduleReminders();
+    }
+  } catch (error) {
+    console.warn('[reminders] 回前台刷新精确闹钟状态失败', error);
+  } finally {
+    exactAlarmForegroundInFlight = false;
+  }
+}
+
+/**
+ * 回到前台时只刷新角标与精确闹钟状态（均不做无条件全量重算，避免耗电）；
+ * 模块级只注册一次。定时准点与后台策略待真机验收（plan 1.4）。
  */
 function registerAppStateListener(): void {
   if (appStateListenerRegistered) {
@@ -609,6 +641,7 @@ function registerAppStateListener(): void {
   AppState.addEventListener('change', (state) => {
     if (state === 'active') {
       void refreshTodayBadge();
+      void refreshExactAlarmOnForeground();
     }
   });
 }

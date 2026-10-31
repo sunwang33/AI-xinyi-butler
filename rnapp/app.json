@@ -12,13 +12,17 @@
       "backgroundColor": "#E9F0EB"
     },
     "android": {
+      "permissions": [
+        "SCHEDULE_EXACT_ALARM"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#E9F0EB"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.aixinyibutler"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -27,7 +31,13 @@
       "expo-router",
       "expo-font",
       "expo-splash-screen",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-notifications",
+        {
+          "color": "#356453"
+        }
+      ]
     ]
   }
 }

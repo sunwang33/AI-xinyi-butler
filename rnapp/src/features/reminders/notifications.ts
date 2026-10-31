@@ -10,9 +10,11 @@
  *
  * 待真机验收：国产 Android 厂商对后台 Alarm 的限制可能影响准点（plan 1.4 风险 5）。
  */
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { AndroidImportance, SchedulableTriggerInputTypes } from 'expo-notifications';
 import type { DateTriggerInput, NotificationRequest, Subscription } from 'expo-notifications';
+import { Linking, Platform } from 'react-native';
 
 /** 全部提醒通知使用的 Android 渠道 ID（scheduler 调度时需带上同一 channelId） */
 export const ANDROID_CHANNEL_ID = 'reminders';
@@ -24,9 +26,30 @@ export const ANDROID_CHANNEL_ID = 'reminders';
 let channelAvailable = true;
 
 /**
+ * 精确闹钟授权三态（T72，D22 方案 A；qa 回炉：异常须与「明确未授权」区分）：
+ * - granted：已授权，dateTrigger 附加 delivery:'alarmClock' 要求准点；
+ * - denied：明确未授权，保持系统默认 bestEffort（省电策略下可能延迟），设置页展示引导行；
+ * - unknown：查询异常 / Expo Go 能力缺失，无法判断——调度侧保守按 bestEffort，
+ *   设置页不展示引导行，避免在无法授权的环境里添堵。
+ */
+export type ExactAlarmStatus = 'granted' | 'denied' | 'unknown';
+
+/**
+ * 精确闹钟是否已授权（调度用布尔缓存，保守语义：异常时为 false=bestEffort）。
+ * 由 refreshExactAlarmStatusAsync() 在通知初始化、设置页挂载、App 回前台时查询刷新。
+ */
+let exactAlarmGranted = false;
+
+/** 精确闹钟授权三态缓存（设置页引导行用，异常为 unknown 而非 denied） */
+let exactAlarmStatus: ExactAlarmStatus = 'unknown';
+
+/**
  * 创建/更新提醒渠道。setNotificationChannelAsync 幂等：渠道已存在时按配置更新，
  * 重复调用不会报错；非 Android 平台为无操作。渠道 API 不可用（Expo Go）时只标记
  * 降级并告警，绝不抛错——提醒初始化的权限申请、监听注册与调度都不得被它阻断。
+ *
+ * 同时完成精确闹钟状态初始化：状态查询封装在 refreshExactAlarmStatusAsync 内
+ * （自带 try/catch），与渠道各自独立互不阻断，渠道失败不影响闹钟状态查询。
  */
 export async function ensureNotificationChannel(): Promise<void> {
   try {
@@ -42,14 +65,109 @@ export async function ensureNotificationChannel(): Promise<void> {
       error,
     );
   }
+  await refreshExactAlarmStatusAsync();
 }
 
-/** 组装 Android 一次性时刻触发器：自定义渠道可用时带上 channelId，否则走默认渠道 */
+/**
+ * 查询精确闹钟授权状态并刷新模块缓存（T72）。
+ * iOS/web 恒为 granted；Expo Go 能力缺失或查询异常时落 unknown 并告警，绝不抛错
+ * （调度侧 exactAlarmGranted 保守置 false=bestEffort；UI 侧不显示引导行）。
+ * 返回刷新后的三态，供设置页决定是否展示引导行、回前台监听判断是否需要重排。
+ */
+export async function refreshExactAlarmStatusAsync(): Promise<ExactAlarmStatus> {
+  try {
+    const result = await Notifications.getExactAlarmPermissionsAsync();
+    exactAlarmGranted = result.granted;
+    exactAlarmStatus = result.granted ? 'granted' : 'denied';
+  } catch (error) {
+    // 无法判断授权状态：调度保守按未授权（bestEffort），UI 不展示引导
+    exactAlarmGranted = false;
+    exactAlarmStatus = 'unknown';
+    console.warn(
+      '[reminders] 精确闹钟状态查询失败（Expo Go 环境属预期），本地通知按 bestEffort 投递',
+      error,
+    );
+  }
+  return exactAlarmStatus;
+}
+
+/** 同步读取缓存的精确闹钟授权布尔状态（调度用），不触发任何系统查询/弹窗 */
+export function isExactAlarmGranted(): boolean {
+  return exactAlarmGranted;
+}
+
+/** 同步读取缓存的精确闹钟三态（设置页引导行用），不触发任何系统查询/弹窗 */
+export function getExactAlarmStatus(): ExactAlarmStatus {
+  return exactAlarmStatus;
+}
+
+/**
+ * 打开系统「闹钟和提醒」授权页（T72 设置页「去开启」入口）。
+ * 用户返回 App 后重新查询真实状态并刷新缓存；仅明确授权返回 true，
+ * denied/unknown 均返回 false。未声明 SCHEDULE_EXACT_ALARM（T71 权限声明落地前）
+ * 或 Expo Go 能力缺失时调用会 reject，此处兜底返回 false 并告警，绝不抛错。
+ * 用户在设置页撤销授权时 Android 会重启 App，Promise 不 resolve，无需处理。
+ */
+export async function requestExactAlarmPermissionAsync(): Promise<boolean> {
+  try {
+    await Notifications.requestExactAlarmPermissionsAsync();
+  } catch (error) {
+    console.warn(
+      '[reminders] 无法打开精确闹钟授权页（Expo Go 或未声明 SCHEDULE_EXACT_ALARM 属预期）',
+      error,
+    );
+    return false;
+  }
+  return (await refreshExactAlarmStatusAsync()) === 'granted';
+}
+
+/**
+ * 打开系统「提醒」渠道设置页（2026-10-31 M5.6 真机验收后开发者拍板新增）。
+ * 背景：MIUI/HyperOS 等国产 ROM 新装应用即使通知总开关开启，渠道级的
+ * 悬浮通知/锁屏通知/铃声默认仍关闭，通知只静默进入通知中心，用户需要手动到
+ * 渠道设置开启；设置页提醒分区用本入口直达（克制、不弹窗、不强制）。
+ * 逐级降级：渠道页 → 应用通知总览页 → 应用详情页；任何一级失败都不抛错。
+ * iOS 与 Expo Go 由调用方隐藏入口，此函数内部也做平台兜底。
+ */
+export async function openReminderChannelSettingsAsync(): Promise<void> {
+  if (Platform.OS !== 'android') {
+    return;
+  }
+  const packageName = Constants.applicationId ?? Constants.expoConfig?.android?.package;
+  if (!packageName) {
+    await Linking.openSettings().catch(() => {});
+    return;
+  }
+  const appExtra = { key: 'android.provider.extra.APP_PACKAGE', value: packageName };
+  const channelExtra = { key: 'android.provider.extra.CHANNEL_ID', value: ANDROID_CHANNEL_ID };
+  try {
+    await Linking.sendIntent('android.settings.CHANNEL_NOTIFICATION_SETTINGS', [
+      appExtra,
+      channelExtra,
+    ]);
+    return;
+  } catch (error) {
+    console.warn('[reminders] 直达渠道设置失败，降级到应用通知总览页', error);
+  }
+  try {
+    await Linking.sendIntent('android.settings.APP_NOTIFICATION_SETTINGS', [appExtra]);
+    return;
+  } catch (error) {
+    console.warn('[reminders] 打开应用通知页失败，降级到应用详情页', error);
+  }
+  await Linking.openSettings().catch(() => {});
+}
+
+/**
+ * 组装 Android 一次性时刻触发器：自定义渠道可用时带上 channelId，否则走默认渠道；
+ * 精确闹钟已授权时要求 alarmClock 准点投递（无权限系统自动回退 bestEffort）。
+ */
 function dateTrigger(date: Date): DateTriggerInput {
   return {
     type: SchedulableTriggerInputTypes.DATE,
     date,
     ...(channelAvailable ? { channelId: ANDROID_CHANNEL_ID } : {}),
+    ...(exactAlarmGranted ? { delivery: 'alarmClock' as const } : {}),
   };
 }
 
@@ -174,7 +292,8 @@ export function setForegroundNotificationHandler(show: boolean = true): void {
 }
 
 /**
- * 模块初始化：注册前台处理器并确保 Android 渠道存在。
+ * 模块初始化：注册前台处理器并确保 Android 渠道存在（T72 起同时初始化
+ * 精确闹钟授权状态缓存）。
  * 不申请权限——权限只在首次真正需要调度时由 ensureNotificationPermission 申请。
  */
 export async function initializeNotifications(): Promise<void> {

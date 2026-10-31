@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, Text, View } from 'react-native';
+import Constants from 'expo-constants';
 import { TextField } from '../../components';
 import { colors, fontSize, spacing } from '../../theme/tokens';
 import { getRepository } from '../../data/repository';
 import type { AppSettings } from '../../data/entities';
 import { rescheduleReminders } from '../reminders/scheduler';
+import {
+  getExactAlarmStatus,
+  openReminderChannelSettingsAsync,
+  refreshExactAlarmStatusAsync,
+  requestExactAlarmPermissionAsync,
+  type ExactAlarmStatus,
+} from '../reminders/notifications';
 import { parseAdvanceDays, parseBlessingCount, parseDeliveryHour } from './validate';
 
 /** 设置落库后重算提醒调度（T23）；失败不阻断保存，静默忽略 */
@@ -15,6 +23,8 @@ function reschedule() {
 /**
  * 全局提醒设置（T18）：默认提前天数（1–30）、送达钟点（0–23 整点）、祝福条数（1–10）。
  * 进入页面读仓储回填；输入失焦时校验，合法即持久化，非法弹中文提示并还原，不写库。
+ * 说明行下方附 T72 精确闹钟引导行（仅明确 denied 显示；granted、unknown 及 Expo Go 不显示）
+ * 与「通知设置」渠道入口行（Android dev/正式包常驻；国产 ROM 新装渠道默认静默的补救）。
  */
 export function GlobalSettingsSection({
   onSettingsChange,
@@ -26,6 +36,9 @@ export function GlobalSettingsSection({
   const [advanceText, setAdvanceText] = useState('');
   const [hourText, setHourText] = useState('');
   const [countText, setCountText] = useState('');
+  // 精确闹钟引导行（T72）：默认 unknown 不展示，仅明确 denied 时才出现；
+  // 查询异常与 Expo Go 均为 unknown，避免在无法授权的环境里显示引导添堵
+  const [exactAlarmStatus, setExactAlarmStatus] = useState<ExactAlarmStatus>('unknown');
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +61,33 @@ export function GlobalSettingsSection({
     // 仅在挂载时读一次仓储；回调为父组件稳定的 setState 包装
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 挂载时查询一次精确闹钟状态：Expo Go 直接跳过，保持 unknown 不显示引导；
+  // refresh 自身已兜底不会 reject，异常落 unknown（同样不显示引导）
+  useEffect(() => {
+    if (Constants.appOwnership === 'expo') return;
+    refreshExactAlarmStatusAsync()
+      .then(setExactAlarmStatus)
+      .catch(() => {});
+  }, []);
+
+  /**
+   * 跳转系统精确闹钟授权页，返回后按模块内最新三态刷新本行。
+   * 明确授权时主动重排：原生 Promise 与 AppState 'active' 到达先后不确定，
+   * 不能依赖回前台监听读到新缓存（qa F3 竞态），此处直接把已排 bestEffort
+   * 通知升级为 alarmClock；重算失败不阻断交互，与本文件 reschedule() 同风格静默。
+   */
+  const handleEnableExactAlarm = () => {
+    requestExactAlarmPermissionAsync()
+      // request 内部已刷新模块缓存：明确授权置 granted，其余按真实三态（denied/unknown）
+      .then((granted) => {
+        setExactAlarmStatus(getExactAlarmStatus());
+        if (granted) {
+          reschedule();
+        }
+      })
+      .catch(() => {});
+  };
 
   /** 通用提交流程：解析 → 与现值比对 → 落库 → 重排调度；非法时还原输入 */
   async function commit<K extends 'globalAdvanceDays' | 'deliveryHour' | 'blessingCount'>(
@@ -144,6 +184,71 @@ export function GlobalSettingsSection({
       >
         提前天数对未单独设置的人与全部节日生效；钟点调整后对尚未送达的提醒立即生效；条数仅对之后新生成的祝福生效。
       </Text>
+      {/* T72 精确闹钟引导行：仅明确 denied 时显示；granted 与 unknown（Expo Go/查询异常）隐藏 */}
+      {exactAlarmStatus === 'denied' ? (
+        <View
+          style={{
+            marginTop: spacing.sm,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+          }}
+        >
+          <Text
+            style={{
+              flex: 1,
+              fontSize: fontSize.footnote,
+              lineHeight: 18,
+              color: colors.inkSoft,
+            }}
+          >
+            开启精确闹钟后，提醒将在设定钟点准时送达；未开启时，系统可能因省电策略延迟送达。
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="去开启精确闹钟"
+            hitSlop={10}
+            onPress={handleEnableExactAlarm}
+            style={{ paddingVertical: spacing.xs }}
+          >
+            <Text style={{ fontSize: fontSize.footnote, color: colors.pineDeep }}>去开启</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {/* 渠道显示设置入口（2026-10-31 拍板）：国产 ROM 新装渠道默认静默，
+          提供一行常驻入口直达系统渠道页开启横幅/锁屏/铃声；Expo Go 无自定义渠道，隐藏 */}
+      {Platform.OS === 'android' && Constants.appOwnership !== 'expo' ? (
+        <View
+          style={{
+            marginTop: spacing.sm,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+          }}
+        >
+          <Text
+            style={{
+              flex: 1,
+              fontSize: fontSize.footnote,
+              lineHeight: 18,
+              color: colors.inkSoft,
+            }}
+          >
+            收不到横幅或锁屏提醒时，可到系统设置开启「提醒」渠道的悬浮通知、锁屏通知与铃声。
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="打开通知显示设置"
+            hitSlop={10}
+            onPress={() => {
+              openReminderChannelSettingsAsync().catch(() => {});
+            }}
+            style={{ paddingVertical: spacing.xs }}
+          >
+            <Text style={{ fontSize: fontSize.footnote, color: colors.pineDeep }}>通知设置</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }

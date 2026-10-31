@@ -12,6 +12,7 @@
     "expo": "~58.0.20",
     "expo-constants": "~58.0.13",
     "expo-crypto": "~58.0.7",
+    "expo-dev-client": "~58.0.17",
     "expo-font": "~58.0.10",
     "expo-linking": "~58.0.14",
     "expo-notifications": "~58.1.7",
@@ -41,7 +42,7 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
+    "android": "expo run:android",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest"
