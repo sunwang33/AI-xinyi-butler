@@ -13,19 +13,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiConsent, ContentSnapshot, OccasionKey } from '../../data/entities';
 import { getRepository } from '../../data/repository';
 import { generateContent } from './generator';
+import { occasionKeyId as keyId } from './snapshotBroadcast';
 import type { ContentContext, ContentError } from './types';
 
 export type ContentKind = 'blessing' | 'gift';
-
-function keyId(key: OccasionKey): string {
-  return [
-    key.personId ?? '',
-    key.occasionType,
-    key.anniversaryId ?? '',
-    key.festivalCode ?? '',
-    key.year,
-  ].join('|');
-}
 
 /** 带 query 标识的状态：id 不匹配当前 query 时一律视为「别的页面」的旧值 */
 interface Keyed<T> {

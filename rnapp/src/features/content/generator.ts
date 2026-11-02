@@ -13,7 +13,19 @@ import type { ContentSnapshot, OccasionKey } from '../../data/entities';
 import type { DataRepository } from '../../data/repository';
 import { fetchBlessings, fetchGifts } from './api';
 import { pickFallbackBlessings } from './fallback';
+import { publishSnapshot } from './snapshotBroadcast';
 import type { ContentContext, ContentError } from './types';
+
+/** 落库快照并广播给同页其它分区（M9 T45：电子贺卡据此即时刷新祝福） */
+async function saveSnapshot(
+  repo: DataRepository,
+  key: OccasionKey,
+  patch: Parameters<DataRepository['upsertSnapshot']>[0],
+): Promise<ContentSnapshot> {
+  const snapshot = await repo.upsertSnapshot(patch);
+  publishSnapshot(key, snapshot);
+  return snapshot;
+}
 
 /** 连续失败达到此次数后，祝福写入通用兜底（spec 全局规则 3） */
 export const FAIL_FALLBACK_THRESHOLD = 3;
@@ -57,7 +69,7 @@ async function runGenerate(
     if (kind === 'blessing') {
       const count = options.count ?? 3;
       const blessings = await fetchBlessings(context, count);
-      const snapshot = await repo.upsertSnapshot({
+      const snapshot = await saveSnapshot(repo, key, {
         ...key,
         blessings,
         status: 'success',
@@ -68,7 +80,7 @@ async function runGenerate(
     }
 
     const gifts = await fetchGifts(context);
-    const snapshot = await repo.upsertSnapshot({
+    const snapshot = await saveSnapshot(repo, key, {
       ...key,
       gifts,
       status: 'success',
@@ -87,7 +99,7 @@ async function runGenerate(
         options.count ?? 3,
         options.festivalName,
       );
-      const snapshot = await repo.upsertSnapshot({
+      const snapshot = await saveSnapshot(repo, key, {
         ...key,
         blessings: fallback,
         status: 'success',
@@ -97,7 +109,7 @@ async function runGenerate(
       return { snapshot, fallbackUsed: true };
     }
 
-    await repo.upsertSnapshot({ ...key, status: 'failed', failCount });
+    await saveSnapshot(repo, key, { ...key, status: 'failed', failCount });
     throw err as ContentError;
   }
 }
