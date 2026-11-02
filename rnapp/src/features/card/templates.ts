@@ -9,13 +9,15 @@
  * 图像生成服务（贺卡仍按 spec 第 10 条由模板与祝福在本机组合，见 plan.md 选型注记）。
  * 画面上的称呼、祝福、落款、日期圈与邮票框均为 T44 在本机叠加，不烘焙进素材。
  *
- * 本文件只登记代号、展示名与背景素材；图文本机组合渲染在 T44，导出在 T46。
+ * 本文件只登记代号、展示名、背景素材与叠加文字配色；图文本机组合渲染在 T44，导出在 T46。
+ * 配色全部复用 theme/tokens（D10），不另造色板。
  */
+import { colors } from '../../theme/tokens';
 
 /** 内置模板代号；落库 card_states.template_code（entities 以 string 存储） */
 export type CardTemplateCode = 'mountain' | 'night' | 'warm';
 
-/** 内置模板定义：代号 + 切换器展示名 + 横版背景素材 */
+/** 内置模板定义：代号 + 切换器展示名 + 横版背景素材 + 本机叠加层配色 */
 export interface CardTemplateDef {
   code: CardTemplateCode;
   /** 模板切换器中的中文展示名：远山 / 月夜 / 暖阳 */
@@ -25,6 +27,12 @@ export interface CardTemplateDef {
    * Metro 静态 require：运行时解析为图片资源引用（number）。
    */
   art: number;
+  /** 称呼 / 祝福 / 落款文字色（浅底用深字、深底用白字） */
+  ink: string;
+  /** 日期圆圈与邮票虚线框的描边色 */
+  deco: string;
+  /** 是否为深底模板：深底文字加投影、邮票框用半透明白底 */
+  dark: boolean;
 }
 
 /**
@@ -42,17 +50,29 @@ export const CARD_TEMPLATES: readonly CardTemplateDef[] = [
   {
     code: 'mountain',
     name: '远山',
-    art: require('../../assets/cards/mountain.jpg'),
+    art: require('../../../assets/cards/mountain.jpg'),
+    // 浅天青底：深松绿字
+    ink: colors.pineDeep,
+    deco: colors.pine,
+    dark: false,
   },
   {
     code: 'night',
     name: '月夜',
-    art: require('../../assets/cards/night.jpg'),
+    art: require('../../../assets/cards/night.jpg'),
+    // 深青夜底：白字
+    ink: colors.white,
+    deco: colors.white,
+    dark: true,
   },
   {
     code: 'warm',
     name: '暖阳',
-    art: require('../../assets/cards/warm.jpg'),
+    art: require('../../../assets/cards/warm.jpg'),
+    // 暖蜜底：松墨字、蜜蜡描边
+    ink: colors.ink,
+    deco: colors.honeyDeep,
+    dark: false,
   },
 ];
 

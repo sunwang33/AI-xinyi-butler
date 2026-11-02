@@ -25,6 +25,7 @@ import {
 import { FESTIVALS } from '../src/features/occasions/festivals';
 import { BlessingSection } from '../src/features/content/BlessingSection';
 import { GiftSection } from '../src/features/content/GiftSection';
+import { CardSection } from '../src/features/card/CardSection';
 import { buildContentContext } from '../src/features/content/context';
 import { ConsentSheet } from '../src/features/consent/ConsentSheet';
 import { colors, fonts, fontSize, spacing } from '../src/theme/tokens';
@@ -315,6 +316,21 @@ export default function OccasionDetailScreen() {
     year: params.year,
   });
 
+  // 贺卡日期圆圈文本（MM·DD）：生日取档案月日、纪念日取其月日、节日取该年具体日期
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  let cardDateLabel = '';
+  if (params.kind === 'birthday' && header.person) {
+    cardDateLabel = `${pad2(header.person.birthdayMonth)}·${pad2(header.person.birthdayDay)}`;
+  } else if (params.kind === 'anniversary' && header.anniversary) {
+    cardDateLabel = `${pad2(header.anniversary.month)}·${pad2(header.anniversary.day)}`;
+  } else if (params.kind === 'festival' && params.festivalCode) {
+    cardDateLabel =
+      FESTIVALS.find((f) => f.code === params.festivalCode)
+        ?.dateOf(params.year)
+        .slice(5)
+        .replace('-', '·') ?? '';
+  }
+
   return (
     <Screen scroll>
       <PageHeader title={headerTitle} />
@@ -345,10 +361,15 @@ export default function OccasionDetailScreen() {
           />
         ) : null}
 
-        {/* 分区三：电子贺卡（M9 / T44–T46 填充：进入即自动组合、模板切换、祝福切换与编辑、导出图片） */}
-        <SectionCard title="电子贺卡">
-          <SectionNote>电子贺卡稍后上线。进入本页时贺卡即自动组合好，可切换模板、选用祝福并导出成图片分享。</SectionNote>
-        </SectionCard>
+        {/* 分区三：电子贺卡（M9 T44：进入即自动组合、称呼落款规则、三套模板切换；
+            T45 祝福切换与手写编辑、T46 导出保存分享随后接入）。
+            key 取日子业务键：切换日子时整块重挂，贺卡状态自然回到加载/自动组合态。 */}
+        <CardSection
+          key={headerKey}
+          occasionKey={occasionKey}
+          person={header.person}
+          dateLabel={cardDateLabel}
+        />
 
         {/* 底部区位：今年已送出 / 往年记录（M11 / T50、T52 填充标记与往年倒序列表）。
             无往年记录时最终文案即「今年是第一次」（spec 第 12 条）。 */}
