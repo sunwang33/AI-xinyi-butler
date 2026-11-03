@@ -62,6 +62,23 @@ function formatDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+const MONTH_CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二'];
+const NTH_CN = ['', '第一', '第二', '第三', '第四', '第五'];
+/** weekday：0=周日 … 6=周六（与 Date.getDay 一致） */
+const WEEKDAY_CN = ['日', '一', '二', '三', '四', '五', '六'];
+
+/**
+ * 浮动星期节日的口语化规则描述（T40 选人页副标题，原型「十一月第四个星期四」）。
+ * 固定日期节日（元旦 / 情人节 / 圣诞节）返回 null，不显示后缀。
+ */
+export function festivalRuleLabel(code: FestivalCode): string | null {
+  const rule = FESTIVAL_RULES[code];
+  if (rule.kind === 'fixed') {
+    return null;
+  }
+  return `${MONTH_CN[rule.month - 1]}月${NTH_CN[rule.nth]}个星期${WEEKDAY_CN[rule.weekday]}`;
+}
+
 /**
  * 六个内置节日，顺序同 FESTIVAL_CODES。
  * dateOf(year) 返回该节日在 year 年的设备本地日期（YYYY-MM-DD）。
