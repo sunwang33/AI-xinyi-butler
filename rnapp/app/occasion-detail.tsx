@@ -316,20 +316,23 @@ export default function OccasionDetailScreen() {
     year: params.year,
   });
 
-  // 贺卡日期圆圈文本（MM·DD）：生日取档案月日、纪念日取其月日、节日取该年具体日期
-  const pad2 = (n: number) => String(n).padStart(2, '0');
-  let cardDateLabel = '';
+  // 贺卡左下角完整日期（YYYY年M月D日）：取今年这次日子的月日，年份用本次年份
+  // （生日也只表示今年这次，不出现出生年/年龄，符合 spec 第 5 条）。
+  let cardMonth = 0;
+  let cardDay = 0;
   if (params.kind === 'birthday' && header.person) {
-    cardDateLabel = `${pad2(header.person.birthdayMonth)}·${pad2(header.person.birthdayDay)}`;
+    cardMonth = header.person.birthdayMonth;
+    cardDay = header.person.birthdayDay;
   } else if (params.kind === 'anniversary' && header.anniversary) {
-    cardDateLabel = `${pad2(header.anniversary.month)}·${pad2(header.anniversary.day)}`;
+    cardMonth = header.anniversary.month;
+    cardDay = header.anniversary.day;
   } else if (params.kind === 'festival' && params.festivalCode) {
-    cardDateLabel =
-      FESTIVALS.find((f) => f.code === params.festivalCode)
-        ?.dateOf(params.year)
-        .slice(5)
-        .replace('-', '·') ?? '';
+    const md = FESTIVALS.find((f) => f.code === params.festivalCode)?.dateOf(params.year).slice(5) ?? '';
+    const [m, d] = md.split('-').map((v) => Number(v));
+    cardMonth = m ?? 0;
+    cardDay = d ?? 0;
   }
+  const cardDateFull = cardMonth > 0 ? `${params.year}年${cardMonth}月${cardDay}日` : '';
 
   return (
     <Screen scroll>
@@ -368,7 +371,7 @@ export default function OccasionDetailScreen() {
           key={headerKey}
           occasionKey={occasionKey}
           person={header.person}
-          dateLabel={cardDateLabel}
+          dateFull={cardDateFull}
         />
 
         {/* 底部区位：今年已送出 / 往年记录（M11 / T50、T52 填充标记与往年倒序列表）。

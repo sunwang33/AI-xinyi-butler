@@ -1,68 +1,87 @@
 /**
- * 电子贺卡成品视图（M9 T44；T45 接入祝福翻页脚与点按编辑）。
- * 纯展示，不读状态、不直接落库：按门禁 A3 的画布比例（2560:1568）铺满模板
- * 背景，再在本机叠加左上日期圆圈、右上手写邮票虚线框、称呼、手写体祝福、角落落款。
+ * 电子贺卡成品视图（M9 T44；T45 接入祝福翻页脚与点按编辑；2026-11-02 门禁重开后改竖版写实摄影）。
+ * 纯展示，不读状态、不直接落库：按门禁 A3（新）竖版 3:4（1860:2480）铺满写实摄影
+ * 背景，再在本机叠加——上部靠左手写体称呼、中部手写体祝福、右下角竖排落款（上为自称、
+ * 下为本次日子完整日期）。
+ * 2026-11-03 真机复验：顶部「日子名」小字（如「乔迁」）被开发者拍板移除——成品贺卡
+ * 不写场合名，不自然；occasionLabel 链路一并删除（详见 tasks.md M9 门禁记录）。
+ *
+ * 可读性：摄影底图本身压暗，本机再叠一张柔暗遮罩 scrim-mask.png（顶/中/底三段
+ * 停点烘焙进 alpha；不引入 expo-linear-gradient 等原生依赖），白字在任意模板上都清晰。
+ * 初版用多个细条 View 插值模拟渐变，真机在连续摄影背景上有明显水平色带，2026-11-03
+ * 改为窄条 PNG 经 GPU 双线性拉伸，平滑无 banding（见 .card-probe/gen_scrim.py）。
  *
  * 规则（spec 第 10 条）：
  * - 称呼 / 落款为 null 时整块不渲染、不留位（通用版节日无称呼；未填自称无落款）；
- * - wish 为 null 表示当年祝福快照尚不存在，按门禁 A2（2026-11-01 拍板「留空、可手写」）
- *   呈现浅色引导语；
- * - 祝福文字可点（onEditWish），T45 起进入手写编辑；footer 为艺术区下方白纸脚，
- *   由 CardSection 传入祝福翻页器与「点按文字可编辑」药丸（对应原型 .pc-foot/.switcher）。
+ * - wish 为 null 表示当年祝福快照尚不存在，按门禁 A2（留空、可手写）呈现浅色引导语；
+ * - 祝福文字可点（onEditWish），进入手写编辑；footer 为艺术区下方白纸脚（翻页器+编辑药丸），
  *   纸脚是操作区，不属于成品画面——T46 导出截图只取艺术区，不含 footer。
- * - 超长祝福按门禁 B 组结论（2026-11-02「软上限 + 自适应缩小」）依字数分档缩小，
- *   不截断、不溢出；字号只取 tokens 既有档位。
- * 模板切换见 CardSection，截图导出在 T46。
+ * - 超长祝福按 B 组「软上限 + 自适应缩小」依字数分档缩小，不截断、不溢出。
+ *   竖版收窄后档位比横版更密（见 wishTypography）。
+ * - 2026-11-02 起：右上邮票框/火苗、左上日期圆圈均已移除（见 tasks.md M9 门禁重开记录）。
  */
-import { ReactNode } from 'react';
-import { ImageBackground, Pressable, Text, View } from 'react-native';
-import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
+import { ComponentRef, ReactNode, Ref } from 'react';
+import { Image, Pressable, Text, View } from 'react-native';
+import { colors, fonts, fontSize, radius } from '../../theme/tokens';
 import type { CardTemplateDef } from './templates';
 
-/** 祝福字号分档（按去空白后的字数）：全部复用 tokens 字号，仅在贺卡内收窄行高防溢出 */
-function wishTypography(length: number): { fontSize: number; lineHeight: number } {
-  if (length <= 24) return { fontSize: fontSize.title2, lineHeight: 36 };
-  if (length <= 40) return { fontSize: fontSize.title3, lineHeight: 31 };
-  if (length <= 60) return { fontSize: fontSize.base, lineHeight: 25 };
-  return { fontSize: fontSize.body, lineHeight: 22 };
+/** 贺卡艺术区宿主节点类型（Fabric 下的公共根实例） */
+export type CardArtHost = ComponentRef<typeof View>;
+
+/**
+ * 祝福字号分档（按去空白后的字数）：竖版较窄，档位更密，行高同步收窄防溢出。
+ * 2026-11-03 真机两轮反馈长文案偏小（开发者：「字太小看着不舒服」），
+ * 第二次拍板：49 字以上不再继续缩，统一 16.5px——80 字硬上限最多约 6 行，
+ * 祝福区纵向余量充足，不压称呼与右下落款。
+ */
+function wishTypography(length: number): { size: number; lineHeight: number } {
+  if (length <= 16) return { size: fontSize.title1, lineHeight: 44 };
+  if (length <= 30) return { size: fontSize.title2, lineHeight: 37 };
+  if (length <= 48) return { size: fontSize.title3, lineHeight: 31 };
+  return { size: fontSize.rowTitle, lineHeight: 29 };
 }
 
 export interface PostcardProps {
   template: CardTemplateDef;
+  /** 右下落款区的完整日期，如「2026年11月3日」（排在自称下方） */
+  dateFull: string;
   /** 称呼原文（不含冒号）；通用版无人传 null，整行不渲染 */
   to: string | null;
   /** 当前祝福文字；null 表示尚无祝福（A2：留空 + 引导） */
   wish: string | null;
   /** 角落落款原文；null 时整块不渲染、不留白 */
   sign: string | null;
-  /** 日期圆圈内文本，如「10·31」 */
-  dateLabel: string;
   /** 无祝福时的浅色引导语（A2） */
   emptyHint?: string;
   /** 点按祝福文字（含空引导）进入手写编辑；不传则文字不可点 */
   onEditWish?: () => void;
   /** 艺术区下方白纸脚内容（祝福翻页器 + 编辑药丸）；操作区，不进 T46 导出图 */
   footer?: ReactNode;
+  /**
+   * 艺术区宿主 View 的 ref（T46 截图目标）。截图只取这层（摄影背景 +
+   * 称呼/祝福/日期/落款，顶部永不渲染场合名），不含纸脚与外部按钮。ref 挂到普通宿主 View 上、
+   * collapsable=false；外层卡片负责屏幕上的圆角裁剪，这层自身直角，截出的即满幅竖图。
+   */
+  artRef?: Ref<CardArtHost>;
 }
 
 export function Postcard({
   template,
+  dateFull,
   to,
   wish,
   sign,
-  dateLabel,
   emptyHint = '在这里写下你的祝福',
   onEditWish,
   footer,
+  artRef,
 }: PostcardProps) {
-  // 深底（月夜）给文字加柔和投影，保证可读；浅底不加
-  const shadow = template.dark
-    ? {
-        textShadowColor: 'rgba(20,40,30,0.35)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 8,
-      }
-    : null;
+  // 摄影底统一白字，加柔和投影保证在亮部也能读
+  const shadow = {
+    textShadowColor: 'rgba(10,16,14,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 10,
+  } as const;
 
   const wishType = wishTypography(wish ? wish.trim().length : 0);
   const editable = typeof onEditWish === 'function';
@@ -77,116 +96,124 @@ export function Postcard({
         backgroundColor: colors.mistDeep,
       }}
     >
-      <ImageBackground
-        source={template.art}
-        resizeMode="cover"
-        style={{ width: '100%', aspectRatio: 2560 / 1568 }}
-      >
-        {/* 左上日期圆圈 */}
-        <View
-          style={{
-            position: 'absolute',
-            top: 12,
-            left: 14,
-            width: 42,
-            height: 42,
-            borderRadius: 21,
-            borderWidth: 1.5,
-            borderColor: template.deco,
-            backgroundColor: template.dark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.28)',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ fontFamily: fonts.num, fontSize: 11, color: template.ink }}>{dateLabel}</Text>
-        </View>
+      {/* T46 截图目标：普通宿主 View（直角、禁止折叠）；屏幕圆角由外层卡片裁剪 */}
+      <View ref={artRef} collapsable={false} style={{ width: '100%', aspectRatio: 1860 / 2480 }}>
+        {/* 写实摄影背景（绝对定位铺满，替代已弃用的 ImageBackground） */}
+        <Image source={template.art} resizeMode="cover" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 
-        {/* 右上邮票虚线框 */}
-        <View
-          style={{
-            position: 'absolute',
-            top: 14,
-            right: 14,
-            width: 52,
-            height: 62,
-            borderRadius: 6,
-            borderWidth: 1.5,
-            borderStyle: 'dashed',
-            borderColor: template.deco,
-            backgroundColor: template.dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.40)',
-          }}
+        {/* 柔暗遮罩：顶部托起日子名/称呼，底部托起日期/落款，中部极轻压暗让祝福不糊；
+            停点烘焙在 scrim-mask.png 中，stretch 由 GPU 平滑拉伸 */}
+        <Image
+          source={require('../../../assets/cards/scrim-mask.png')}
+          resizeMode="stretch"
+          pointerEvents="none"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
         />
 
-        {/* 文字区：顶部让开日期圆圈与邮票框 */}
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: spacing.lg, paddingTop: 58 }}>
+        {/* 文字层：上（称呼）／中（祝福）／下（日期+落款） */}
+        <View
+          pointerEvents="box-none"
+          style={{ position: 'absolute', inset: 0, paddingHorizontal: 28, paddingTop: 34, paddingBottom: 26 }}
+        >
           {to ? (
-            <Text style={[{ fontFamily: fonts.hand, fontSize: fontSize.title2, color: template.ink }, shadow]}>
-              {to}：
-            </Text>
-          ) : null}
-
-          {/* 祝福文字可点（T45）：点 AI 文案或空引导都进手写编辑 */}
-          <Pressable
-            onPress={onEditWish}
-            disabled={!editable}
-            hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-            accessibilityRole="button"
-            accessibilityLabel="编辑贺卡祝福文字"
-            style={({ pressed }) => ({ opacity: editable && pressed ? 0.65 : 1 })}
-          >
-            {wish ? (
-              <Text
-                style={[
-                  {
-                    fontFamily: fonts.hand,
-                    fontSize: wishType.fontSize,
-                    lineHeight: wishType.lineHeight,
-                    marginTop: 6,
-                    color: template.ink,
-                  },
-                  shadow,
-                ]}
-              >
-                {wish}
-              </Text>
-            ) : (
-              <Text
-                style={[
-                  {
-                    fontFamily: fonts.hand,
-                    fontSize: fontSize.title2,
-                    lineHeight: 36,
-                    marginTop: 6,
-                    color: template.ink,
-                    opacity: 0.42,
-                  },
-                  shadow,
-                ]}
-              >
-                {emptyHint}
-              </Text>
-            )}
-          </Pressable>
-
-          {sign ? (
             <Text
               style={[
                 {
                   fontFamily: fonts.hand,
-                  fontSize: fontSize.title3,
+                  fontSize: fontSize.title1,
                   color: template.ink,
-                  alignSelf: 'flex-end',
-                  textAlign: 'right',
-                  marginTop: 10,
+                  // 2026-11-03 真机拍板：称呼靠左（不居中），符合真实贺卡抬头习惯
+                  textAlign: 'left',
+                  marginTop: 16,
                 },
                 shadow,
               ]}
             >
-              {sign}
+              {to}：
             </Text>
           ) : null}
+
+          {/* 祝福居中可点：点 AI 文案或空引导都进手写编辑 */}
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+            <Pressable
+              onPress={onEditWish}
+              disabled={!editable}
+              hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel="编辑贺卡祝福文字"
+              style={({ pressed }) => ({ opacity: editable && pressed ? 0.7 : 1 })}
+            >
+              {wish ? (
+                <Text
+                  style={[
+                    {
+                      fontFamily: fonts.hand,
+                      fontSize: wishType.size,
+                      lineHeight: wishType.lineHeight,
+                      color: template.ink,
+                      textAlign: 'center',
+                    },
+                    shadow,
+                  ]}
+                >
+                  {wish}
+                </Text>
+              ) : (
+                <Text
+                  style={[
+                    {
+                      fontFamily: fonts.hand,
+                      fontSize: fontSize.title2,
+                      lineHeight: 38,
+                      color: template.ink,
+                      textAlign: 'center',
+                      opacity: 0.55,
+                    },
+                    shadow,
+                  ]}
+                >
+                  {emptyHint}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+
+          {/* 右下落款区：上为自称、下为完整日期（2026-11-03 真机拍板，日期从左下
+              挪到自称下方，符合真实贺卡署名在上、日期在下的惯例）；无自称时仅日期 */}
+          <View style={{ alignItems: 'flex-end' }}>
+            {sign ? (
+              <Text
+                style={[
+                  {
+                    fontFamily: fonts.hand,
+                    fontSize: fontSize.title3,
+                    color: template.ink,
+                    textAlign: 'right',
+                  },
+                  shadow,
+                ]}
+              >
+                {sign}
+              </Text>
+            ) : null}
+            <Text
+              style={[
+                {
+                  fontFamily: fonts.num,
+                  fontSize: fontSize.small,
+                  color: template.ink,
+                  opacity: 0.92,
+                  textAlign: 'right',
+                  marginTop: 3,
+                },
+                shadow,
+              ]}
+            >
+              {dateFull}
+            </Text>
+          </View>
         </View>
-      </ImageBackground>
+      </View>
 
       {/* 艺术区下方白纸脚（原型 .pc-foot）：操作区，不进导出图 */}
       {footer !== undefined ? (

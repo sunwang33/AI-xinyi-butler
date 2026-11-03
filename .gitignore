@@ -4,3 +4,7 @@
 
 # T43 贺卡模板开发期出图过程稿（废稿/合成预览/临时链接），不入库；成品在 rnapp/assets/cards/
 /.card-probe/
+
+# JVM 崩溃现场日志（偶发出现在仓库根目录）
+/hs_err_pid*.log
+/replay_pid*.log

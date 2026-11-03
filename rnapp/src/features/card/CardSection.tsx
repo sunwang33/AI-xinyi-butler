@@ -12,19 +12,23 @@
  *   · 手写后翻页箭头置灰——手写与 AI 文案互斥显示，回到 AI 必须在弹层里显式
  *     「用回第 n 条 AI 祝福」，绝不因误触翻页静默丢掉手写（呼应 A2「已手写不被覆盖」）；
  *   · 超长手写按 B 组结论软上限 80 字、超过 60 字提示并由 Postcard 自动缩小字号。
+ * - T46 导出：明信片下方「保存到手机 / 经系统分享面板发送」两个按钮。点按即时截取艺术区
+ *   （不含纸脚）为 1860×2480 竖版 3:4 JPG；存相册走 writeOnly 权限（一生只请一次，被拒不重弹，
+ *   弹层给「去系统设置 / 改用分享」）；分享走系统面板、不需相册权限，始终可用。
  *
  * 状态生命周期：父页面以日子业务键（headerKey）作为本分区的 key，切换日子时整块重挂、
  * state 自然回到初始加载态。因此挂载 effect 每个实例只跑一次，也不在 effect 体内同步
  * setState（避免级联渲染）；写库结果在 await 之后的微任务中回填。
  */
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Linking, Pressable, Text, View } from 'react-native';
 import { Button, Card, Sheet, TextField } from '../../components';
 import type { CardState, OccasionKey, Person } from '../../data/entities';
 import { getRepository } from '../../data/repository';
 import { useBroadcastSnapshot } from '../content/snapshotBroadcast';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
-import { Postcard } from './Postcard';
+import { captureCardArt, saveCardToLibrary, shareCardImage } from './export';
+import { Postcard, type CardArtHost } from './Postcard';
 import {
   CARD_ART_SIZE,
   CARD_TEMPLATES,
@@ -40,13 +44,13 @@ const WISH_SOFT_MAX = 60;
 export function CardSection({
   occasionKey,
   person,
-  dateLabel,
+  dateFull,
 }: {
   occasionKey: OccasionKey;
   /** 通用版节日为 null */
   person: Person | null;
-  /** 日期圆圈文本，如「10·31」，由页面按日子类型算好传入 */
-  dateLabel: string;
+  /** 贺卡底部左侧完整日期，如「2026年11月3日」（今年这次的日子日期） */
+  dateFull: string;
 }) {
   const [card, setCard] = useState<CardState | null>(null);
   // 当年祝福快照首屏值（挂载时从仓储读，离线可看）
@@ -56,6 +60,49 @@ export function CardSection({
   // 手写弹层与其草稿（草稿不直接改库，点保存才落库）
   const [editorVisible, setEditorVisible] = useState(false);
   const [draft, setDraft] = useState('');
+
+  // T46 导出：艺术区截图节点、进行中的动作、内联反馈、相册权限被拒降级弹层
+  const artRef = useRef<CardArtHost>(null);
+  const [exportBusy, setExportBusy] = useState<'save' | 'share' | null>(null);
+  const [exportNotice, setExportNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [deniedVisible, setDeniedVisible] = useState(false);
+
+  const flashNotice = (text: string) => {
+    setExportNotice({ kind: 'ok', text });
+    setTimeout(() => setExportNotice((cur) => (cur?.text === text ? null : cur)), 1800);
+  };
+
+  // 保存 / 分享共用：先按当前画面实时截图（每次重截，避免发出切换前的旧图）
+  const runExport = async (mode: 'save' | 'share') => {
+    if (exportBusy || !artRef.current) return;
+    setExportBusy(mode);
+    setExportNotice(null);
+    try {
+      const uri = await captureCardArt(artRef);
+      if (mode === 'save') {
+        const result = await saveCardToLibrary(uri);
+        if (result.ok) {
+          flashNotice('已保存到手机相册');
+        } else if (result.reason === 'denied') {
+          // 权限被拒：不反复弹系统窗，交给降级弹层（去设置 / 改用分享）
+          setDeniedVisible(true);
+        } else {
+          setExportNotice({ kind: 'err', text: '这次没能存进相册，请稍后再试，或改用分享。' });
+        }
+      } else {
+        const result = await shareCardImage(uri);
+        if (!result.ok) {
+          setExportNotice({ kind: 'err', text: '暂时调不起系统分享，请稍后再试。' });
+        }
+      }
+    } catch (e) {
+      // 暂存底层原因便于真机排查（T46 验收期；view-shot 在新架构下的节点解析问题）
+      console.warn('[T46] captureCardArt failed:', e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e));
+      setExportNotice({ kind: 'err', text: '图片生成失败，请稍后再试。' });
+    } finally {
+      setExportBusy(null);
+    }
+  };
 
   // 挂载即自动组合 + 读当年祝福快照（只读，不触发 AI 生成）。
   // 切换日子由父组件 key 重挂驱动，本 effect 对每个实例只跑一次。
@@ -232,13 +279,48 @@ export function CardSection({
           <>
             <Postcard
               template={template}
+              dateFull={dateFull}
               to={to}
               wish={wish}
               sign={sign}
-              dateLabel={dateLabel}
               onEditWish={openEditor}
               footer={footer}
+              artRef={artRef}
             />
+
+            {/* 导出：设计稿贺卡屏，两个并排小按钮；保存走相册权限，分享始终可用 */}
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 11 }}>
+              <Button
+                title="保存到手机"
+                size="sm"
+                style={{ flex: 1 }}
+                loading={exportBusy === 'save'}
+                disabled={exportBusy !== null}
+                onPress={() => void runExport('save')}
+              />
+              <Button
+                title="经系统分享面板发送"
+                size="sm"
+                variant="ghost"
+                style={{ flex: 1 }}
+                loading={exportBusy === 'share'}
+                disabled={exportBusy !== null}
+                onPress={() => void runExport('share')}
+              />
+            </View>
+            {exportNotice ? (
+              <Text
+                style={{
+                  fontFamily: fonts.sans,
+                  fontSize: fontSize.footnote,
+                  color: exportNotice.kind === 'ok' ? colors.pineDeep : colors.honeyDeep,
+                  textAlign: 'center',
+                  marginTop: spacing.sm,
+                }}
+              >
+                {exportNotice.text}
+              </Text>
+            ) : null}
 
             {/* 切换条：左为当前模板名，右为三套缩略；不按日子分组 */}
             <View
@@ -266,8 +348,9 @@ export function CardSection({
                       <Image
                         source={tpl.art}
                         style={{
-                          width: 30,
-                          height: 30,
+                          // 竖版 3:4 缩略
+                          width: 27,
+                          height: 36,
                           borderRadius: radius.sm,
                           borderWidth: 2,
                           borderColor: selected ? colors.honey : 'transparent',
@@ -288,7 +371,7 @@ export function CardSection({
                 marginTop: spacing.sm,
               }}
             >
-              贺卡已按模板自动摆好，切换模板不丢祝福
+              切换模板不丢祝福；收件人无需安装本 App，即可查看完整贺卡。
             </Text>
           </>
         )}
@@ -336,6 +419,40 @@ export function CardSection({
             onPress={revertToAi}
           />
         ) : null}
+      </Sheet>
+
+      {/* 相册保存权限被拒降级（B 组 2026-11-02）：不重弹系统窗，给去设置 / 改用分享 */}
+      <Sheet visible={deniedVisible} title="保存到相册需要权限" onClose={() => setDeniedVisible(false)}>
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: fontSize.base,
+            lineHeight: 24,
+            color: colors.inkSoft,
+            marginBottom: spacing.md,
+          }}
+        >
+          保存到手机相册的权限没有开启。可以去系统设置里打开；也可以直接用系统分享面板发送——在面板里同样能保存图片，且不需要相册权限。
+        </Text>
+        <Button
+          title="去系统设置开启"
+          block
+          onPress={() => {
+            setDeniedVisible(false);
+            void Linking.openSettings();
+          }}
+        />
+        <Button
+          title="改用分享发送"
+          variant="ghost"
+          size="sm"
+          block
+          style={{ marginTop: spacing.sm }}
+          onPress={() => {
+            setDeniedVisible(false);
+            void runExport('share');
+          }}
+        />
       </Sheet>
     </Card>
   );

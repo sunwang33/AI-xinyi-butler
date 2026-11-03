@@ -37,7 +37,15 @@
         {
           "color": "#356453"
         }
-      ]
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": false,
+          "granularPermissions": []
+        }
+      ],
+      "expo-sharing"
     ]
   }
 }
