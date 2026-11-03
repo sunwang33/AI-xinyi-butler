@@ -28,6 +28,8 @@ import { GiftSection } from '../src/features/content/GiftSection';
 import { CardSection } from '../src/features/card/CardSection';
 import { buildContentContext } from '../src/features/content/context';
 import { ConsentSheet } from '../src/features/consent/ConsentSheet';
+import { useFavorites } from '../src/features/favorites/useFavorites';
+import { personLabelFor, type FavoriteScope } from '../src/features/favorites/restore';
 import { colors, fonts, fontSize, spacing } from '../src/theme/tokens';
 
 /** 校验通过后的日子定位参数 */
@@ -134,6 +136,10 @@ export default function OccasionDetailScreen() {
   const rawParams = useLocalSearchParams();
   // 参数非法时 params 为 null，直接走错误态，不再触发任何数据读取
   const params = parseParams(rawParams as Record<string, string | string[] | undefined>);
+
+  // M10：收藏状态（全量，聚焦时刷新）。无条件挂在所有 early return 之前，
+  // 供祝福 / 礼物 / 贺卡三区的书签按钮共用同一份状态。
+  const favoriteApi = useFavorites();
 
   // 拆出原始查询字段：params 每次渲染为新对象，按原始字段作依赖，query 不变则不重复读取
   const queryKind = params?.kind ?? null;
@@ -306,6 +312,14 @@ export default function OccasionDetailScreen() {
     festivalCode: params.festivalCode,
     year: params.year,
   };
+  // M10：收藏写入所需的日子作用域（定位键 ＋ 对象 / 日子名快照）。
+  // 通用版节日 person 为 null，personLabel 落「通用（未指定人）」。
+  const favoriteScope: FavoriteScope = {
+    key: occasionKey,
+    personLabel: personLabelFor(header.person),
+    occasionName,
+  };
+
   const contentContext = buildContentContext({
     occasionType: params.kind,
     person: header.person,
@@ -351,6 +365,8 @@ export default function OccasionDetailScreen() {
           festivalName={festivalName}
           personId={params.personId}
           ensureConsent={ensureConsent}
+          favoriteApi={favoriteApi}
+          favoriteScope={favoriteScope}
         />
 
         {/* 分区二：礼物建议（M7）。spec 第 7 条：通用版节日只含祝福与贺卡，不渲染礼物分区 */}
@@ -361,6 +377,8 @@ export default function OccasionDetailScreen() {
             consent={consent}
             festivalName={festivalName}
             ensureConsent={ensureConsent}
+            favoriteApi={favoriteApi}
+            favoriteScope={favoriteScope}
           />
         ) : null}
 
@@ -372,6 +390,8 @@ export default function OccasionDetailScreen() {
           occasionKey={occasionKey}
           person={header.person}
           dateFull={cardDateFull}
+          favoriteApi={favoriteApi}
+          favoriteScope={favoriteScope}
         />
 
         {/* 底部区位：今年已送出 / 往年记录（M11 / T50、T52 填充标记与往年倒序列表）。

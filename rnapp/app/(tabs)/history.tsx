@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AppHeader, EmptyState, Screen } from '../../src/components';
+import { FavoriteList } from '../../src/features/favorites/FavoriteList';
 import { colors, fonts, fontSize, radius, spacing } from '../../src/theme/tokens';
 
 /** 历史 Tab 分区：已送出流水（T69/T70 填充）/ 收藏（T49 填充） */
@@ -13,9 +14,10 @@ const SECTIONS: { key: HistorySection; label: string }[] = [
 
 /**
  * 历史 Tab（plan 3.1 /(tabs)/history，spec 全局规则 5 / D19，T64）：
- * 当前仅搭「已送出 / 收藏」双分区静态骨架：顶部原型 .seg 风格分段控件，
- * 纯本地 useState 切换、默认停在「已送出」；两分区都只放空状态，不接任何数据
- * （收藏内容 T49、已送出流水 T69/T70）。
+ * 顶部原型 .seg 风格分段控件，纯本地 useState 切换、默认停在「已送出」。
+ * - 收藏段（M10 T49）：FavoriteList 接 favorites，chips 筛类型、按收藏时间倒序、
+ *   祝福复制 / 礼物去看看 / 贺卡导出 / 取消收藏，全部离线可见；
+ * - 已送出段仍为空态（流水留 M11 的 T69/T70）。
  */
 export default function HistoryScreen() {
   const [section, setSection] = useState<HistorySection>('sent');
@@ -76,9 +78,13 @@ export default function HistoryScreen() {
       </View>
 
       {section === 'sent' ? (
-        <EmptyState title="还没有标记过已送出的心意" />
+        <EmptyState
+          title="还没有标记过已送出的心意"
+          description="标记过送出的祝福、礼物与贺卡会留在这里。"
+        />
       ) : (
-        <EmptyState title="还没有收藏内容" />
+        // M10 T49：收藏分区（自带加载 / 空 / 筛选空三态）
+        <FavoriteList />
       )}
     </Screen>
   );

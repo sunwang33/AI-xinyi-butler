@@ -23,8 +23,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Pressable, Text, View } from 'react-native';
 import { Button, Card, Sheet, TextField } from '../../components';
-import type { CardState, OccasionKey, Person } from '../../data/entities';
+import type { CardPayload, CardState, OccasionKey, Person } from '../../data/entities';
 import { getRepository } from '../../data/repository';
+import { FavoriteToggle } from '../favorites/FavoriteToggle';
+import type { FavoriteScope } from '../favorites/restore';
+import type { FavoriteStateApi } from '../favorites/useFavorites';
 import { useBroadcastSnapshot } from '../content/snapshotBroadcast';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import { captureCardArt, saveCardToLibrary, shareCardImage } from './export';
@@ -45,12 +48,18 @@ export function CardSection({
   occasionKey,
   person,
   dateFull,
+  favoriteApi,
+  favoriteScope,
 }: {
   occasionKey: OccasionKey;
   /** 通用版节日为 null */
   person: Person | null;
   /** 贺卡底部左侧完整日期，如「2026年11月3日」（今年这次的日子日期） */
   dateFull: string;
+  /** M10：收藏状态与 toggle */
+  favoriteApi: FavoriteStateApi;
+  /** M10：本贺卡所属的日子作用域 */
+  favoriteScope: FavoriteScope;
 }) {
   const [card, setCard] = useState<CardState | null>(null);
   // 当年祝福快照首屏值（挂载时从仓储读，离线可看）
@@ -152,6 +161,19 @@ export function CardSection({
 
   const to = person ? (person.salutation?.trim() || person.name) : null;
   const sign = person?.signature?.trim() ? person.signature : null;
+
+  // M10：当前这版贺卡的完整图文快照（图片不入库，仅存模板与图文参数）。
+  // 称呼未填用姓名（to 已含此回退）；通用版无称呼存空串；祝福为空也允许收藏。
+  const cardPayload: CardPayload | null = card
+    ? {
+        template_code: card.templateCode,
+        salutation: to ?? '',
+        text: wish ?? '',
+        signature: sign,
+        occasion_type: favoriteScope.key.occasionType,
+        occasion_name: favoriteScope.occasionName,
+      }
+    : null;
 
   // 局部落库：乐观更新，仓储只 SET 传入字段，故模板/选择/手写三者互不覆盖
   const persist = async (patch: { selectedIndex?: number; editedText?: string | null }) => {
@@ -287,6 +309,20 @@ export function CardSection({
               footer={footer}
               artRef={artRef}
             />
+
+            {/* M10：收藏当前这版（同模板＋称呼＋文案＋自称再点取消；改字 / 换模板后成新版本） */}
+            {cardPayload ? (
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 11 }}>
+                <FavoriteToggle
+                  api={favoriteApi}
+                  scope={favoriteScope}
+                  kind="card"
+                  payload={cardPayload}
+                  idleLabel="收藏这版贺卡"
+                  activeLabel="已收藏这版"
+                />
+              </View>
+            ) : null}
 
             {/* 导出：设计稿贺卡屏，两个并排小按钮；保存走相册权限，分享始终可用 */}
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 11 }}>

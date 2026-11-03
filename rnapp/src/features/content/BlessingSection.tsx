@@ -8,6 +8,9 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { Button, Card } from '../../components';
 import type { AiConsent, OccasionKey } from '../../data/entities';
+import { FavoriteToggle } from '../favorites/FavoriteToggle';
+import type { FavoriteScope } from '../favorites/restore';
+import type { FavoriteStateApi } from '../favorites/useFavorites';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import type { ContentContext } from './types';
 import { useGeneratedContent } from './useGeneratedContent';
@@ -21,6 +24,8 @@ export function BlessingSection({
   festivalName,
   personId,
   ensureConsent,
+  favoriteApi,
+  favoriteScope,
 }: {
   occasionKey: OccasionKey;
   context: ContentContext;
@@ -31,6 +36,10 @@ export function BlessingSection({
   personId: string | null;
   /** 未同意时先弹告知，同意后执行传入的生成动作 */
   ensureConsent: (action: () => void) => void;
+  /** M10：收藏状态与 toggle */
+  favoriteApi: FavoriteStateApi;
+  /** M10：本条祝福所属的日子作用域（定位键 ＋ 对象 / 日子名快照） */
+  favoriteScope: FavoriteScope;
 }) {
   const router = useRouter();
   const state = useGeneratedContent('blessing', occasionKey, context, consent, {
@@ -84,7 +93,14 @@ export function BlessingSection({
                 <Text style={{ fontFamily: fonts.sans, fontSize: fontSize.base, lineHeight: 24, color: colors.ink }}>
                   {text}
                 </Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.sm }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: spacing.sm,
+                  }}
+                >
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => onCopy(text, index)}
@@ -101,6 +117,13 @@ export function BlessingSection({
                       {copiedIndex === index ? '已复制' : '复制'}
                     </Text>
                   </Pressable>
+                  {/* M10：每条祝福可单独收藏，同文案再点取消 */}
+                  <FavoriteToggle
+                    api={favoriteApi}
+                    scope={favoriteScope}
+                    kind="blessing"
+                    payload={{ text }}
+                  />
                 </View>
               </View>
             ))}

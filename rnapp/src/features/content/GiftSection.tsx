@@ -7,6 +7,9 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Button, Card, Sheet } from '../../components';
 import type { AiConsent, GiftSuggestion, OccasionKey } from '../../data/entities';
+import { FavoriteToggle } from '../favorites/FavoriteToggle';
+import type { FavoriteScope } from '../favorites/restore';
+import type { FavoriteStateApi } from '../favorites/useFavorites';
 import { GIFT_PLATFORMS, openGiftSearch } from '../gift/link';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import type { ContentContext } from './types';
@@ -19,12 +22,18 @@ export function GiftSection({
   consent,
   festivalName,
   ensureConsent,
+  favoriteApi,
+  favoriteScope,
 }: {
   occasionKey: OccasionKey;
   context: ContentContext;
   consent: AiConsent | null;
   festivalName: string | null;
   ensureConsent: (action: () => void) => void;
+  /** M10：收藏状态与 toggle */
+  favoriteApi: FavoriteStateApi;
+  /** M10：本礼物所属的日子作用域 */
+  favoriteScope: FavoriteScope;
 }) {
   const state = useGeneratedContent('gift', occasionKey, context, consent, {
     // 礼物固定向模型要 6 条（云函数忽略 count），count 仅为 hook 入参完整性
@@ -67,7 +76,21 @@ export function GiftSection({
                 <Text style={{ fontFamily: fonts.sans, fontSize: fontSize.body, lineHeight: 22, color: colors.inkSoft, marginTop: 2 }}>
                   {gift.reason}
                 </Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.sm }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: spacing.sm,
+                  }}
+                >
+                  {/* M10：每个礼物建议可单独收藏（按名称＋理由＋搜索词去重） */}
+                  <FavoriteToggle
+                    api={favoriteApi}
+                    scope={favoriteScope}
+                    kind="gift"
+                    payload={gift}
+                  />
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`去看看：${gift.name}`}
