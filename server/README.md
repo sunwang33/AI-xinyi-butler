@@ -21,14 +21,17 @@ server/
 ├── deploy/
 │   ├── nginx-api.conf.example      # 备案子域 Nginx 站点（AI 网关 + Supabase 限路径反代）
 │   └── ecosystem.config.cjs.example
-└── test/gateway.test.js            # node --test，9 个纯逻辑用例
+└── test/
+    ├── gateway.test.js             # 入参校验 / 结果解析 / 限频窗口纯逻辑
+    ├── auth.test.js                # JWT 双通道鉴权与 60s 正缓存（fetch 桩）
+    └── httpGateway.test.js         # 真实端口端到端（鉴权→限频→校验→上游全链路）
 ```
 
 ## 本机自测
 
 ```bash
 cd server
-npm test          # 9 个用例
+npm test          # 全部 node:test 自测（27 个用例，零网络请求）
 # 不启动真实服务（启动需 DEEPSEEK_API_KEY 等环境变量）
 ```
 

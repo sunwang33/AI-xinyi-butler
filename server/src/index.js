@@ -8,8 +8,12 @@
  *
  * 隐私：日志只记录 kind / 日子类型 / 是否有人物 / 通道 / 状态与耗时，
  * 不落姓名、称呼、自称、特征等任何用户内容（沿用 T30 口径）。
+ *
+ * 结构：createGatewayServer(deps) 只造 server 不监听，便于集成测试注入
+ * 假鉴权/限频/上游并起在随机端口；直接运行本文件时才读配置并 listen。
  */
 import http from 'node:http';
+import { pathToFileURL } from 'node:url';
 import { assertConfig, config } from './config.js';
 import { createCallerResolver } from './auth.js';
 import { createLimiter } from './rateLimit.js';
@@ -33,14 +37,14 @@ function sendJson(res, status, body) {
 }
 
 /** 隐私安全日志：只含不含个人信息的维度 */
-function auditLog(evt, req, extra = {}) {
+function auditLog(evt, ctx, extra = {}) {
   console.log(
     JSON.stringify({
       evt,
-      channel: req?.channel ?? '-',
-      kind: req?.valid?.kind ?? '-',
-      occasionType: req?.valid?.occasion?.type ?? '-',
-      hasPerson: req?.valid?.person ? true : false,
+      channel: ctx?.channel ?? '-',
+      kind: ctx?.valid?.kind ?? '-',
+      occasionType: ctx?.valid?.occasion?.type ?? '-',
+      hasPerson: ctx?.valid?.person ? true : false,
       ...extra,
     }),
   );
@@ -78,14 +82,23 @@ function readBody(req) {
   });
 }
 
-async function main() {
-  assertConfig();
-
-  const resolveCaller = createCallerResolver(config);
-  const anonLimiter = createLimiter({ windowMs: 60_000, max: config.anonRatePerMin });
-  const userLimiter = createLimiter({ windowMs: 60_000, max: config.userRatePerMin });
-
-  const server = http.createServer(async (req, res) => {
+/**
+ * 造网关 server（不监听）。依赖全部可注入：集成测试由此替换鉴权与上游。
+ * @param {object} deps
+ * @param deps.config 配置（至少含 anonRatePerMin/userRatePerMin）
+ * @param deps.resolveCaller 鉴权解析（auth.js 的 createCallerResolver 产物）
+ * @param deps.anonLimiter 匿名限频器
+ * @param deps.userLimiter 登录用户限频器
+ * @param deps.callDeepSeek 上游调用（upstream.js 的 callDeepSeek）
+ */
+export function createGatewayServer({
+  config: cfg,
+  resolveCaller,
+  anonLimiter,
+  userLimiter,
+  callDeepSeek: runUpstream,
+}) {
+  return http.createServer(async (req, res) => {
     // 预检
     if (req.method === 'OPTIONS') {
       res.writeHead(204, CORS_HEADERS);
@@ -164,7 +177,7 @@ async function main() {
     // ④ 调上游并按既有契约返回
     const started = Date.now();
     try {
-      const raw = await callDeepSeek(ctx.valid, config);
+      const raw = await runUpstream(ctx.valid, cfg);
       if (ctx.valid.kind === 'blessing') {
         const blessings = parseBlessings(raw, ctx.valid.count);
         auditLog('success', ctx, { ms: Date.now() - started, count: blessings.length });
@@ -180,6 +193,18 @@ async function main() {
       // 上游故障 / 超时 / 返回不合规一律 502，让客户端计入连续失败
       sendJson(res, 502, { error: { code: 'upstream_failed' } });
     }
+  });
+}
+
+async function main() {
+  assertConfig();
+
+  const server = createGatewayServer({
+    config,
+    resolveCaller: createCallerResolver(config),
+    anonLimiter: createLimiter({ windowMs: 60_000, max: config.anonRatePerMin }),
+    userLimiter: createLimiter({ windowMs: 60_000, max: config.userRatePerMin }),
+    callDeepSeek,
   });
 
   server.listen(config.port, '127.0.0.1', () => {
@@ -202,7 +227,10 @@ async function main() {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
-main().catch((err) => {
-  console.error('网关启动失败：', err.message);
-  process.exit(1);
-});
+// 仅直接运行本文件时启动服务；被测试 import 时不监听端口
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error('网关启动失败：', err.message);
+    process.exit(1);
+  });
+}

@@ -762,12 +762,12 @@
 - **完成后用户能看到什么**：国内真机不挂代理也能稳定生成祝福/礼物；登录与未登录状态都能正常生成；服务说明可看到账号与云端数据用途。
 - **前置**：T55、G-NET 反代部署；**可并行**：与 T56 并行（主机部署由开发者配合，AI 只产出配置与部署说明，不掌握主机凭证）。
 - **完成记录（2026-11-04，代码完成，待主机部署＋真机联调收口）**：
-  ① 网关代码全部落地新目录 `server/`（独立于 rnapp，**零第三方依赖**，Node 18+ 原生 ESM，`node --test` 自测 **16/16 通过**）：`src/config.js`（环境变量＋启动断言）、`src/types.js`（入参契约从 Edge types.ts 逐字移植）、`src/prompt.js`（中文提示词、模型参数 model `deepseek-chat`/temperature 0.8/礼物 max_tokens 1800、结果解析逐字迁移）、`src/upstream.js`（DeepSeek 调用 25s 超时）、`src/auth.js`（双通道：Bearer JWT 经 `/auth/v1/user` 校验＋60s 正缓存按 user.id 限频 30/min；`x-api-key` 匿名为来源 IP 限频 24/min）、`src/rateLimit.js`（内存滑动窗口，**PM2 必须单实例 fork**）、`src/index.js`（仅 `GET /health`、`POST /api/generate`，CORS/16KB body 上限/404·405/中文错误体/审计日志不含姓名特征，监听 127.0.0.1）。
+  ① 网关代码全部落地新目录 `server/`（独立于 rnapp，**零第三方依赖**，Node 18+ 原生 ESM，`node --test` 自测 **27/27 通过**）：`src/config.js`（环境变量＋启动断言）、`src/types.js`（入参契约从 Edge types.ts 逐字移植）、`src/prompt.js`（中文提示词、模型参数 model `deepseek-chat`/temperature 0.8/礼物 max_tokens 1800、结果解析逐字迁移）、`src/upstream.js`（DeepSeek 调用 25s 超时）、`src/auth.js`（双通道：Bearer JWT 经 `/auth/v1/user` 校验＋60s 正缓存按 user.id 限频 30/min；`x-api-key` 匿名为来源 IP 限频 24/min）、`src/rateLimit.js`（内存滑动窗口，**PM2 必须单实例 fork**）、`src/index.js`（仅 `GET /health`、`POST /api/generate`，CORS/16KB body 上限/404·405/中文错误体/审计日志不含姓名特征，监听 127.0.0.1）。
   ② 部署产物：`deploy/nginx-api.conf.example`（80→443；`/api/generate`、`/health` 转本机 3000；`/auth/v1/`、`/rest/v1/` 前缀与 `/functions/v1/generate-content` 精确反代 Supabase，Host 改写＋`proxy_ssl_server_name on`＋XFF 覆盖式下发；其余一律 404，不做开放代理）、`deploy/ecosystem.config.cjs.example`（fork 单实例）、`README.md`（主机部署 6 步＋4 条 curl 验收）；密钥只进服务器 `.env`/`ecosystem.config.cjs`（均已 gitignore），不入库。
   ③ App 端：新增 `src/lib/gateway.ts` 单布尔开关 `USE_SHANGHAI_GATEWAY`（**默认 false**，主机联调通过才置 true）；`src/features/content/api.ts` 重写为 Edge/上海双通道，登录态自动带 JWT、匿名带 anon key，响应与 network/ratelimit/service 错误契约两通道一致；typecheck/lint 全净、**jest 157/157 绿**。
   ④ `app/service-notice.tsx` 新增「账号登录与云端同步」一节（登录可选/七类上云数据/三类仅本机数据/境外存储指向隐私政策/离线只读/退出清留可选），原"账号功能上线时补充"占位删除；AI 中转措辞改为"经我们自己的服务端转发"（两通道均成立）。**该节合规文案为 AI 起草，待开发者审阅拍板。**
   ⑤ **旧 Edge 函数处置（实施时记录）**：暂保留为备用回退通道（Nginx 精确反代了它），待网关生产稳定一个版本、T58 全量验收后再停用，届时删 Nginx functions 段、删 App edge 分支、Dashboard 删函数。
-  ⑥ 同日晚补 `server/test/auth.test.js`（7 例：Bearer 通过/大小写空白容忍/上游 401 与网络异常/失败不缓存/60 秒正缓存命中/匿名 key 对错/匿名按 IP 建键），服务端自测共 **16/16**。HTTP 层端到端集成测试（起真实端口打 /health、401、400、429、200）需把 index.js 的 server 实例导出以便关闭，留作部署前小重构，不在今晚范围。
+  ⑥ 同日晚补齐鉴权与 HTTP 层测试：`server/test/auth.test.js`（7 例：Bearer 通过/大小写空白容忍/上游 401 与网络异常/失败不缓存/60 秒正缓存命中/匿名 key 对错/匿名按 IP 建键）；`server/test/httpGateway.test.js`（11 例真实端口端到端：health/OPTIONS/404/405/401 双因/匿名祝福与登录用户 200/礼物必须有人/bad_json·bad_request/匿名 429/上游 502/16KB 大包）。为支持注入假鉴权与假上游，`src/index.js` 小重构为 `createGatewayServer(deps)` 工厂（只造 server 不监听），直接运行文件时才读配置 listen（import.meta.url 判断）；真实进程冒烟已通过（startup 日志、默认限频 24/30、/health 200）。服务端自测共 **27/27**。
   **待办（需开发者在场）**：按 `server/README.md` 主机部署（DNS→PM2→Nginx/证书→curl 四验收）→真机匿名/登录两通道各生成祝福与礼物→翻开关 true→反代稳定后再切 `supabase.ts` 数据通道 base URL→随 T58 一起真机收口。
 
 ### T58　账号链路真机验收
@@ -776,6 +776,7 @@
 - **涉及文件 / 页面**：`docs/qa/` 验收记录。
 - **完成后用户能看到什么**：以上场景全部符合预期，未登录路径无回归。
 - **前置**：T56、T57。
+- **验收清单（2026-11-04 晚预制）**：`docs/qa/t58-cloud-account-checklist.md`，九组 40 条——注册改密、未登录回归（含 T77 修复的「已送出」标记重点组）、首登静默合并、在线写同步、离线只读、退出清/留、换号隔离、卸载重装、T57 网关联调。
 
 ---
 
