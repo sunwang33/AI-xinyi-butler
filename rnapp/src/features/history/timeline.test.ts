@@ -8,7 +8,7 @@ import {
   groupSentTimeline,
   monthDayOf,
   occasionNameOf,
-  stampDayOf,
+  stampYearOf,
   timelineSubtitle,
   timelineTitle,
 } from './timeline';
@@ -165,14 +165,16 @@ describe('流水行文案', () => {
     expect(timelineTitle(festival)).toBe(`妈妈 · ${FESTIVALS[0].name}`);
   });
 
-  it('副行：日期＋实际送出种类，种类固定祝福 / 礼物 / 贺卡顺序；邮戳取「日」', () => {
+  it('副行：日期＋实际送出种类，种类固定祝福 / 礼物 / 贺卡顺序；邮戳取年份后两位', () => {
     const group = groupSentTimeline([
       makeRow(makeRecord({ id: 'c', kind: 'card', year: 2026, markedAt: '2026-10-28T11:00:00.000Z', payload: { template_code: 'warm', salutation: '', text: '', signature: null, occasion_type: 'birthday', occasion_name: '生日' } })),
       makeRow(makeRecord({ id: 'b', kind: 'blessing', year: 2026, markedAt: '2026-10-28T09:00:00.000Z', payload: { text: '祝' } })),
     ])[0];
     expect(timelineSubtitle(group)).toBe('10月28日送出 · 祝福 · 贺卡');
-    expect(stampDayOf(group.lastMarkedAt)).toBe(28);
     expect(monthDayOf('不是日期')).toBeNull();
-    expect(stampDayOf('不是日期')).toBeNull();
+    // 原型 .sent-mark：戳上是年份两位（与标记日、日子的月日都无关）
+    expect(stampYearOf(2026)).toBe(26);
+    expect(stampYearOf(2025)).toBe(25);
+    expect(stampYearOf(2000)).toBe(0);
   });
 });

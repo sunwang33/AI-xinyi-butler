@@ -4,6 +4,7 @@
  * 仓储 listSentTimeline 返回扁平行（一条 sent_records ＋ JOIN 出的人名 / 纪念日名），
  * 本文件按「人 × 日子 × 年」聚合成 UI 一行（分条存储、聚合展示，G-A4③）：
  * - 组排序按组内最新 marked_at 倒序；
+ * - 红邮戳数字照原型 .sent-mark 取年份后两位（2026→26、2025→25），不是标记日 / 日子的日；
  * - 标题 / 副行文案照原型 .pickrow：「陈叔的生日 2026」「妈妈 · 母亲节 2026」，
  *   副行「10 月 28 日送出 · 祝福 · 贺卡」；
  * - 节日名从 FESTIVALS 常量表按 code 派生（data 层不依赖 features，故放在这里）。
@@ -31,7 +32,7 @@ export interface SentTimelineGroup {
   occasionName: string;
   /** 组内记录（marked_at 倒序；同类同年业务唯一，最多祝福 / 礼物 / 贺卡各一条） */
   records: SentRecord[];
-  /** 组内最新标记时间，决定组排序与邮戳日期 */
+  /** 组内最新标记时间，决定组排序与副行「M月D日送出」 */
   lastMarkedAt: string;
 }
 
@@ -116,10 +117,9 @@ export function monthDayOf(iso: string): string | null {
   return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
-/** 邮戳上的日期数字（组内最新标记那天的「日」）；非法返回 null */
-export function stampDayOf(iso: string): number | null {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d.getDate();
+/** 红邮戳上的数字：年份后两位（原型 .sent-mark，2026→26、2025→25、2000→0） */
+export function stampYearOf(year: number): number {
+  return year % 100;
 }
 
 /** 副行：「M月D日送出 · 祝福 · 贺卡」（只列组内实际送出的种类，固定顺序） */

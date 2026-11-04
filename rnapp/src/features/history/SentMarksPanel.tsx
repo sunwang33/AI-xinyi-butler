@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import type { ContentKind, Person, SentRecord } from '../../data/entities';
 import { Button } from '../../components';
 import type { FavoriteScope } from '../favorites/restore';
+import { buildFestivalSelectHref } from '../occasions/routes';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import { BoxNote, BoxTitle, DashedBox } from '../content/SectionParts';
 import { formatMarkedAt } from './format';
@@ -117,7 +118,13 @@ export function SentMarksPanel({
             title="去选一位具体的人"
             variant="ghost"
             size="sm"
-            onPress={() => router.push(`/festival/${scope.key.festivalCode}/select`)}
+            onPress={() => {
+              // 通用版分支必有 festivalCode（kind=festival），守卫仅为类型收窄
+              const code = scope.key.festivalCode;
+              if (code) {
+                router.push(buildFestivalSelectHref(code, scope.key.year));
+              }
+            }}
           />
         </View>
       </DashedBox>

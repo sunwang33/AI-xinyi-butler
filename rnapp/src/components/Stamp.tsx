@@ -13,7 +13,7 @@ export type StampVariant = 'ready' | 'sent' | 'mark';
 
 export interface StampProps {
   variant: StampVariant;
-  /** ready：倒计时天数大字（如 1）；sent：送出日期数字（如 26）；mark 不用 */
+  /** ready：倒计时天数大字（如 1）；sent：年份后两位（如 2026 年→26）；mark 不用 */
   day?: string | number;
   /** 仅 ready：数字旁的单位，默认「天」；传空串省略 */
   unit?: string;

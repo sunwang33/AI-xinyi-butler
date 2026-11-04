@@ -2,7 +2,7 @@
  * 历史 Tab「已送出」全局流水列表（M11 T69 列表 / T70 回看入口，对应原型 .pickrow 行）。
  *
  * - 仓储扁平行经 groupSentTimeline 按「人 × 日子 × 年」聚合成一行：
- *   左为印泥红「已送」邮戳（组内最新标记日），标题「谁的什么日子 年份」，
+ *   左为印泥红「已送」邮戳（年份后两位，照原型 .sent-mark），标题「谁的什么日子 年份」，
  *   副行「M月D日送出 · 祝福 · 礼物 · 贺卡」；
  * - 三态：首次加载转圈；读取失败给错误态与「重试」（不与空状态混淆）；从未标记给空状态；
  * - 点按聚合行开 SentTimelineSheet 在本页内只读回看（T70，零新路由）。
@@ -14,7 +14,7 @@ import { colors, fonts, fontSize, spacing } from '../../theme/tokens';
 import { SentTimelineSheet } from './SentTimelineSheet';
 import {
   groupSentTimeline,
-  stampDayOf,
+  stampYearOf,
   timelineSubtitle,
   timelineTitle,
   type SentTimelineGroup,
@@ -59,11 +59,10 @@ export function SentTimeline() {
     <View>
       <View style={{ gap: 12 }}>
         {groups.map((group) => {
-          const day = stampDayOf(group.lastMarkedAt);
           return (
             <ListRow
               key={`${group.personId}|${group.occasionType}|${group.anniversaryId ?? ''}|${group.festivalCode ?? ''}|${group.year}`}
-              left={<Stamp variant="sent" day={day === null ? '·' : day} />}
+              left={<Stamp variant="sent" day={stampYearOf(group.year)} />}
               title={
                 <Text>
                   {timelineTitle(group)}{' '}
