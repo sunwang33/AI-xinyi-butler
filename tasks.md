@@ -711,10 +711,16 @@
 # M12　账号登录与云端存储（spec 第 14 条）
 
 > 登录为可选项，未登录必须能完整使用 App。
-> ⛳ **门禁 G-A6（本里程碑开工前拍板）**：首次登录时本机已有数据与云端数据的合并/迁移策略与冲突处理、退出登录后本机数据的去留、云端账号在无网络时的数据缓存口径。
+> ✅ **门禁 G-A6（2026-11-04 已拍板，开发者全选推荐项）**：①首登**静默合并**——本机匿名行保留 UUID 全部上传并入云端，同行两端都改过按 `updated_at` 新者胜，异行并存不弹合并窗；②退出登录**弹窗二选一**「清除本机缓存（默认聚焦，云端不动可重登恢复）/ 保留在本机」，4 张仅本机表（设置/单人提醒/节日开关/通知日志）始终保留；③登录后**离线缓存只读**——可查看不可写，写入口离线禁用并提示，在线写云端成功后回写本机，启动/写后/聚焦做 `updated_at` 增量同步，删除经软删（`deleted=true`＋刷新 `updated_at`）应用层级联传播。**明确不做离线写队列（outbox）**。spec 第 14 条、plan 阶段 10、data-model 7.3/7.4 已同步。
 >
-> ⛳ **门禁 G-NET（2026-10-31 连通性实验后新增，M12 开工前必须拍板）：国内网络访问 Supabase 的生产方案。**
-> 实证结论：App 原生网络栈在国内 Wi-Fi/蜂窝直连 `*.supabase.co` 均在 TLS 层被重置（`java.net.SocketException: Connection reset`，FunctionsFetchError），**与节点无关**——首尔项目与同日新建的东京测试项目（yxeohbfpcdsicsfvfhyg）表现一致；代理走日本出口即恢复。小米/夸克浏览器因默认云加速中转能打开，不能作为可直连证据。换 Supabase 节点不能解决（阻断发生在国内出口的 SNI 识别，且项目区域不可迁移）。备选：① 自有备案域名 + 国内云函数（腾讯云/阿里云）承载 AI 网关并反代必要的 Supabase API；② 评估 Supabase Custom Hostname（自定义 SNI 是否绕过阻断需实测，注意该功能档位与备案要求）；③ 后端整体迁国内云。**未拍板前不影响 M8–M11 开发（本地 SQLite + 真机走代理调试），但影响发布与 M12 云端功能，M12 前必须定论。**
+> ✅ **门禁 G-NET（2026-11-04 拍板定稿：方案①——自有备案域名＋腾讯云上海主机反代，AI 网关搬回国）。**
+> 背景实证：App 原生网络栈在国内 Wi-Fi/蜂窝直连 `*.supabase.co` 均在 TLS 层被 SNI 阻断（`Connection reset`），与节点无关；代理即恢复。**定稿架构**：
+> - **反代层**：开发者已有备案域名＋腾讯云上海轻量主机（OpenCloudOS/宝塔，2C2G/40G，公网 124.223.173.79，200Mbps 按流量计费，有效期至 2027-09）。新增备案子域（如 `api.<主域>`，子域沿用主域 ICP 备案、无需重新备案）A 记录指向该主机；Nginx/Caddy 在主机终止 TLS 并 `proxy_pass` 到 `https://wohcvgarvrizbbcepggg.supabase.co`（须改写 Host 头＋`proxy_ssl_server_name on`，Cloudflare 按 Host 路由回源）；**仅放行 `/auth/v1/`、`/rest/v1/` 等本应用路径，写死唯一上游，绝不做通用开放代理**；安全组仅开 80/443（宝塔面板改非标端口并保持更新）。App 端 `supabaseUrl` 换为该子域，anon key/JWT/RLS 全部不变。
+> - **AI 网关回国**：`supabase/functions/generate-content/`（index/prompt/rate_limit）移植为该主机上的 Node 小服务（PM2/systemd 常驻），链路变为 手机→上海→DeepSeek 两跳；JWT 校验与匿名限频通道在 T57 实施；Supabase Edge 上的旧函数保留或停用由 T57 收口时定。
+> - **2026-11-04 主机实测（go 判据）**：上海机房 `curl .../auth/v1/health` 连测 5 次均 HTTP 401、0.23–0.51s；`/rest/v1/`、`/functions/v1/generate-content` 均 401；DNS 落 Cloudflare 边缘（172.64.149.246 / 104.18.38.10）。Cloudflare 是 Supabase 自身入口 CDN，我方零账号零费用零配置。
+> - **合规义务（发布前）**：云同步首次开启时单独告知并取得「数据出境」同意（境外接收方 Supabase/AWS 首尔、数据类别与删除口径），写入 T79 隐私政策；上架国内商店需办 **APP 备案**（区别于已有网站 ICP 备案）。第一版用户量级在数据出境豁免阈值内（非敏感 <10 万人），T79 起草、开发者审阅拍板。
+> - **长期演进（不阻塞第一版）**：若要数据彻底不出境，可将云端库迁腾讯云 Postgres（Repository 接口已为此抽象），反代与网关平滑切换。
+> - 开发/真机调试期继续用 adb reverse 7890 代理直连 Supabase，不依赖上述反代（反代在 T56 联调前部署即可）。
 
 ### T54　Postgres 云端表与 RLS
 
@@ -722,6 +728,8 @@
 - **涉及文件 / 页面**：`supabase/migrations/`。
 - **完成后用户能看到什么**：无独立界面；登录后数据有归属、用户互相隔离。
 - **前置**：G-A6 拍板。
+
+> **完成记录（2026-11-04）**：迁移文件 `supabase/migrations/20261104093000_init_cloud_tables.sql`，已 `supabase db push` 应用到首尔项目，`supabase migration list` 本地/远端均 `20261104093000`。内容：7 张上云表（uuid 主键、jsonb、boolean、timestamptz）逐列对照本机 `001_init.ts` 同构，枚举 CHECK 原样（含中文 relation、六节日码、status/kind）；每表 `user_id NOT NULL REFERENCES auth.users ON DELETE CASCADE`＋updated_at/deleted 默认；业务表间不建物理外键（G-A6 应用层软删批次，首登可任意顺序上传）；三个 COALESCE 表达式唯一索引以 user_id 领先（ux_sent_record 含 year DESC/kind，对齐 G-A4）；set_updated_at 触发器七表齐挂；七表 enable RLS 并各建 select/insert/update/delete 四条仅本人策略。文件头注释已警告 T56：首登批量上传必须显式带原 created_at/updated_at，否则被 default now() 覆盖破坏新者胜比较。**RLS 接口实测**（anon key）：7 表匿名 GET 全部 200 `[]`；匿名 POST 带任意 user_id 返回 401 `42501 new row violates row-level security policy`。登录用户本人读写留待 T56/T58 联调验证。
 
 ### T55　邮箱密码登录 / 忘记密码 / 退出与设置页账号区 ✅（认证部分提前完成，2026-10-28）
 
@@ -738,14 +746,14 @@
 - **涉及文件 / 页面**：`src/data/repository/supabase/`、依赖注入/数据源切换逻辑。
 - **完成后用户能看到什么**：登录后换机或卸载重装登录同一账号，人员、快照、贺卡状态、收藏、往年记录都还在；断网时已生成内容可看。
 - **前置**：T55、T54。
-- **实现借鉴（2026-11-02，参考同类项目「离线处理与收尾」M11-05）**：离线期间的本地写操作走「待同步队列（outbox）」暂存，网络恢复后自动按序 flush 到 Supabase，避免断网即丢或需手动重登。可参考其新增独立 `src/lib/sync.ts` 统一编排、各 Repository 写入队列表的结构，而非在每个页面各写重试。联网状态监听统一用 T78 引入的 `@react-native-community/netinfo`（2026-11-02 已拍板纳入第一版），M12 直接复用，不再另建检测；该监听在 T78 已先用于 AI 区「真断网即时提示」。具体合并/冲突仍以 G-A6 结论为准。
+- **同步口径（G-A6 2026-11-04 定稿，以此为准）**：**不做离线写队列（outbox）**——曾考虑借鉴同类项目的 outbox 暂存方案，拍板后放弃；登录态离线为缓存只读，写入口由 T78 的 NetInfo 网络态统一禁用并提示。新增独立 `src/lib/sync.ts` 统一编排：首登静默合并（匿名行保留 UUID 上传、同行 `updated_at` 新者胜）、`last_pulled_at` 水位增量拉取（软删行在本机物理清除）、在线写路径「云端成功 → 回写本机」、退出时按用户选择清/留缓存；不要在各页面各写同步逻辑。T78 引入的 `@react-native-community/netinfo`（2026-11-02 已拍板纳入第一版）同时用于 AI 区「真断网即时提示」与云写入口禁用/联网恢复触发同步；「已联网但 Supabase 被阻断」仍按请求失败处理，不视为离线。
 
-### T57　Edge Functions 登录鉴权与服务说明补充
+### T57　AI 网关搬回国、登录鉴权与服务说明补充（G-NET 2026-11-04 调整）
 
-- **做什么**：Edge Functions 对已登录用户校验 Supabase JWT，同时保留未登录用户的匿名限频通道（未登录必须可完整使用）；通知仍全部走本地调度、不引入云端推送；继续不使用 Storage；服务说明补充账号信息与云端数据用途。
-- **涉及文件 / 页面**：`supabase/functions/`（鉴权中间件）、`app/service-notice.tsx`。
-- **完成后用户能看到什么**：登录与未登录状态下祝福/礼物都能正常生成；服务说明可看到账号与云端数据用途。
-- **前置**：T55；**可并行**：与 T56 并行。
+- **做什么**：按 G-NET 定稿把 `generate-content` 从 Supabase Edge Functions 移植为腾讯云上海主机上的 Node 小服务（`server/` 新目录，PM2/systemd 常驻；prompt/rate_limit 原样迁移），经备案子域 `/api/generate` 之类路径暴露，Nginx 限路径转发；服务对已登录用户校验 Supabase JWT（向反代后的 Supabase `/auth/v1/user` 或验签），同时保留未登录用户的匿名限频通道（未登录必须可完整使用）；App 端生成接口的 base URL 按登录/通道配置切换。通知仍全部走本地调度、不引入云端推送；继续不使用 Storage；服务说明补充账号信息与云端数据用途。Supabase Edge 上旧函数的去留（停用或保留为备用）实施时记录。
+- **涉及文件 / 页面**：新增 `server/`（主机网关源码，独立于 rnapp）、`supabase/functions/generate-content/`（迁移源）、App 内生成请求的 base URL 配置、`app/service-notice.tsx`；主机 Nginx/PM2 部署步骤记入 docs。
+- **完成后用户能看到什么**：国内真机不挂代理也能稳定生成祝福/礼物；登录与未登录状态都能正常生成；服务说明可看到账号与云端数据用途。
+- **前置**：T55、G-NET 反代部署；**可并行**：与 T56 并行（主机部署由开发者配合，AI 只产出配置与部署说明，不掌握主机凭证）。
 
 ### T58　账号链路真机验收
 
@@ -973,11 +981,12 @@
 
 | 编号 | 一句话标题 |
 | --- | --- |
-| ⛳ G-A6 | 拍板：本机/云端合并冲突、退出后本机数据去留、离线缓存口径 |
-| T54 | 创建 Postgres 7 张上云表、CHECK/唯一索引与 RLS 策略 |
+| ⛳ G-A6 ✅ | 2026-11-04 拍板：首登静默合并新者胜、退出弹窗默认清除、离线缓存只读（不做写队列） |
+| T54 ✅ | 2026-11-04 部署收口。`20261104093000_init_cloud_tables.sql` 已 `db push`（本地/远端版本一致）；anon key 实测：7 表匿名 GET 全 200 `[]`、匿名 POST 被 401 `42501 new row violates row-level security policy` 拒绝，RLS 边界生效 |
 | T55 | 实现邮箱密码登录（含忘记密码邮件重置）/退出与设置页账号区（认证部分已提前实施） |
 | T56 | 实现 SupabaseRepository、首登迁移合并与离线缓存 |
-| T57 | Edge Functions 增加 JWT 校验并保留匿名通道，补充服务说明 |
+| ⛳ G-NET ✅ | 2026-11-04 拍板：备案域名＋上海腾讯云主机反代 Supabase（仅 /auth、/rest 限路径），AI 网关搬回国（主机 Node 服务）；实测机房出境 401/0.2–0.5s |
+| T57 | AI 网关移植上海主机（`server/`）＋JWT 校验/匿名限频＋服务说明补充（G-NET 调整，原 Edge 加鉴权方案作废） |
 | T58 | 账号链路真机验收（含换机恢复与未登录回归） |
 
 ## M12.5　联网体验与隐私合规收尾（2026-11-02 纳入第一版）
