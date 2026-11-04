@@ -14,6 +14,7 @@ import type { FavoriteStateApi } from '../favorites/useFavorites';
 import { SentToggle } from '../history/SentToggle';
 import type { SentStateApi } from '../history/useSentRecords';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
+import { useOnline } from '../../lib/network';
 import type { ContentContext } from './types';
 import { useGeneratedContent } from './useGeneratedContent';
 import { BoxNote, BoxTitle, DashedBox, NoticeBar } from './SectionParts';
@@ -51,6 +52,8 @@ export function BlessingSection({
     count: blessingCount,
     festivalName,
   });
+  // T78：设备真断网（飞行模式/无连接）时即时提示并禁用生成；SNI 阻断不在此列
+  const online = useOnline();
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const blessings = state.snapshot?.blessings ?? [];
@@ -71,7 +74,9 @@ export function BlessingSection({
       <View style={{ marginTop: spacing.md, gap: spacing.md }}>
         {blessings.length > 0 ? (
           <>
-            {state.fallbackUsed ? (
+            {!online ? (
+              <NoticeBar>当前无网络，暂时不能重新生成；恢复网络后可继续，已有祝福可正常复制。</NoticeBar>
+            ) : state.fallbackUsed ? (
               <NoticeBar>
                 网络暂时不给力，这里先展示通用祝福；联网后点「重新生成」可获取贴合 TA 的版本。
               </NoticeBar>
@@ -166,6 +171,7 @@ export function BlessingSection({
                 variant="ghost"
                 size="sm"
                 loading={state.busy}
+                disabled={!online}
                 // 撤回同意后重新生成必须重新过告知门禁（T28：未同意不发送任何信息）
                 onPress={() => ensureConsent(() => state.run())}
               />
@@ -176,6 +182,12 @@ export function BlessingSection({
             <ActivityIndicator color={colors.pine} />
             <BoxNote>正在为 TA 准备祝福…</BoxNote>
           </View>
+        ) : !online ? (
+          // T78：设备本地无连接的即时离线态（区别于「需要网络」的请求失败重试态）
+          <DashedBox>
+            <BoxTitle>无网络连接</BoxTitle>
+            <BoxNote>设备当前没有联网，暂时无法生成祝福。恢复网络后会自动继续，无需重启。</BoxNote>
+          </DashedBox>
         ) : state.error || state.failedBefore ? (
           <DashedBox>
             <BoxTitle>需要网络</BoxTitle>

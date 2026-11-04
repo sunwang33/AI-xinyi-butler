@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiConsent, ContentSnapshot, OccasionKey } from '../../data/entities';
 import { getRepository } from '../../data/repository';
+import { useNetworkStore } from '../../lib/network';
 import { generateContent } from './generator';
 import { occasionKeyId as keyId } from './snapshotBroadcast';
 import type { ContentContext, ContentError } from './types';
@@ -41,6 +42,8 @@ export function useGeneratedContent(
   );
 
   const autoTriedRef = useRef(false);
+  // T78：设备真断网时不自动生成，恢复在线后由本值驱动 effect 补发
+  const online = useNetworkStore((s) => s.online);
   // 档案/特征异步加载完成后 context 会变；run 经 ref 始终读最新值
   const contextRef = useRef(context);
   useEffect(() => {
@@ -81,6 +84,11 @@ export function useGeneratedContent(
   const fallbackUsed = notice?.id === id ? notice.value.fallbackUsed : false;
 
   const run = useCallback(async () => {
+    // T78 双保险：设备确已断网时不发请求（UI 入口同时禁用）；
+    // 「连着 Wi-Fi 但服务不可达」不在此拦截，交给请求失败路径
+    if (!useNetworkStore.getState().online) {
+      return;
+    }
     setBusyId(id);
     setNotice({ id, value: { error: null, fallbackUsed: false } });
     try {
@@ -104,14 +112,15 @@ export function useGeneratedContent(
   }, [id, kind, options.count, options.festivalName]);
 
   // 已同意且尚无内容时自动生成一次（失败后不自动重试，等用户手动点）。
+  // T78：设备真断网时挂起，不消耗这次自动尝试；恢复在线后 effect 重跑自动补发。
   // 经微任务触发，使 run 内的 setState 发生在本次 effect 提交之后。
   useEffect(() => {
-    if (!loaded || consent !== 'agreed' || autoTriedRef.current) return;
+    if (!loaded || consent !== 'agreed' || autoTriedRef.current || !online) return;
     if (!hasContent(snapshot) && !busy) {
       autoTriedRef.current = true;
       void Promise.resolve().then(run);
     }
-  }, [loaded, consent, snapshot, busy, hasContent, run]);
+  }, [loaded, consent, snapshot, busy, hasContent, run, online]);
 
   return {
     snapshot,

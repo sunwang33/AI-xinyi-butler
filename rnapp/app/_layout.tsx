@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { getDatabase } from '../src/data/db';
 import { useAccountStore } from '../src/features/account/authStore';
+import { initNetwork } from '../src/lib/network';
 import { initializeReminders } from '../src/features/reminders/scheduler';
 import {
   NotoSansSC_400Regular,
@@ -47,6 +48,11 @@ export default function RootLayout() {
   // 登录态恢复走 AsyncStorage，不阻塞首屏（登录为可选，首页不依赖登录态）
   useEffect(() => {
     useAccountStore.getState().initialize();
+  }, []);
+
+  // T78：设备联网状态订阅一次，AI 区即时离线提示与 M12 云同步恢复触发共用
+  useEffect(() => {
+    initNetwork();
   }, []);
 
   useEffect(() => {

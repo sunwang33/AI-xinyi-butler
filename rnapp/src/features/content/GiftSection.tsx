@@ -13,6 +13,7 @@ import type { FavoriteStateApi } from '../favorites/useFavorites';
 import { SentToggle } from '../history/SentToggle';
 import type { SentStateApi } from '../history/useSentRecords';
 import { GIFT_PLATFORMS, openGiftSearch } from '../gift/link';
+import { useOnline } from '../../lib/network';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import type { ContentContext } from './types';
 import { useGeneratedContent } from './useGeneratedContent';
@@ -47,6 +48,8 @@ export function GiftSection({
   });
   const [target, setTarget] = useState<GiftSuggestion | null>(null);
   const gifts = state.snapshot?.gifts ?? [];
+  // T78：设备真断网（飞行模式/无连接）时即时提示并禁用生成；SNI 阻断不在此列
+  const online = useOnline();
 
   const goShopping = async (platformCode: (typeof GIFT_PLATFORMS)[number]['code']) => {
     if (!target) return;
@@ -126,7 +129,9 @@ export function GiftSection({
                 </View>
               </View>
             ))}
-            {state.error ? (
+            {!online ? (
+              <NoticeBar>当前无网络，暂时不能重新生成；恢复网络后可继续，已有礼物建议可正常查看。</NoticeBar>
+            ) : state.error ? (
               // 已有内容时重新生成失败：旧建议保留，但必须明确提示（spec 全局规则 3；礼物不兜底）
               <NoticeBar>
                 {state.error.reason === 'ratelimit'
@@ -140,6 +145,7 @@ export function GiftSection({
                 variant="ghost"
                 size="sm"
                 loading={state.busy}
+                disabled={!online}
                 // 撤回同意后重新生成必须重新过告知门禁（T28：未同意不发送任何信息）
                 onPress={() => ensureConsent(() => state.run())}
               />
@@ -150,6 +156,12 @@ export function GiftSection({
             <ActivityIndicator color={colors.pine} />
             <BoxNote>正在挑选适合 TA 的礼物…</BoxNote>
           </View>
+        ) : !online ? (
+          // T78：设备本地无连接的即时离线态（区别于「需要网络」的请求失败重试态）
+          <DashedBox>
+            <BoxTitle>无网络连接</BoxTitle>
+            <BoxNote>设备当前没有联网，暂时无法获取礼物建议。恢复网络后会自动继续，无需重启。</BoxNote>
+          </DashedBox>
         ) : state.error || state.failedBefore ? (
           <DashedBox>
             <BoxTitle>需要网络</BoxTitle>
