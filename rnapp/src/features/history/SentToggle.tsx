@@ -16,6 +16,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import type { ContentKind, ContentPayload } from '../../data/entities';
 import { colors, fonts, fontSize } from '../../theme/tokens';
 import { payloadFingerprint } from '../favorites/fingerprint';
+import { CLOUD_READONLY_ALERT, useCloudReadOnly, writeErrorMessage } from '../account/useCloudReadOnly';
 import { decideSentAction, findYearKind, SENT_KIND_LABEL } from './sentDecision';
 import type { SentStateApi } from './useSentRecords';
 
@@ -42,6 +43,7 @@ function StampCheckIcon({ active, color }: { active: boolean; color: string }) {
 export function SentButton({
   active,
   busy = false,
+  disabled = false,
   idleLabel = '标记送出',
   activeLabel = '已送出',
   onPress,
@@ -49,18 +51,21 @@ export function SentButton({
 }: {
   active: boolean;
   busy?: boolean;
+  /** 只读模式（登录态离线）置灰，不响应点击 */
+  disabled?: boolean;
   idleLabel?: string;
   activeLabel?: string;
   onPress: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const color = active ? colors.honeyDeep : colors.inkSoft;
+  const dimmed = busy || disabled;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected: active, busy }}
+      accessibilityState={{ selected: active, busy, disabled }}
       accessibilityLabel={active ? activeLabel : idleLabel}
-      disabled={busy}
+      disabled={dimmed}
       onPress={onPress}
       hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
       style={({ pressed }) => [
@@ -73,7 +78,7 @@ export function SentButton({
           borderRadius: 999,
           paddingHorizontal: 10,
           paddingVertical: 4,
-          opacity: busy ? 0.5 : pressed ? 0.6 : 1,
+          opacity: dimmed ? 0.5 : pressed ? 0.6 : 1,
         },
         style,
       ]}
@@ -111,6 +116,8 @@ export function SentToggle({
   style?: StyleProp<ViewStyle>;
 }) {
   const [busy, setBusy] = useState(false);
+  // 登录态离线：送出记录走云表，置灰拦截（G-A6）
+  const readOnly = useCloudReadOnly();
   const records = api.records ?? [];
   const existing = findYearKind(records, year, kind);
   // 仅当该年该种类标记的就是当前这条时才亮「已送出」；标记的是别的内容时保持未标记态
@@ -125,7 +132,7 @@ export function SentToggle({
       await api.mark(year, kind, payload);
     } catch (e) {
       console.warn('[T50] markSent failed:', e);
-      Alert.alert('暂时没记下', '本地数据写入失败，请稍后再试。');
+      Alert.alert('暂时没记下', writeErrorMessage(e, '请稍后再试。'));
     } finally {
       setBusy(false);
     }
@@ -137,7 +144,7 @@ export function SentToggle({
       await api.unmark(id);
     } catch (e) {
       console.warn('[T50] unmarkSent failed:', e);
-      Alert.alert('暂时没取消掉', '本地数据写入失败，请稍后再试。');
+      Alert.alert('暂时没取消掉', writeErrorMessage(e, '请稍后再试。'));
     } finally {
       setBusy(false);
     }
@@ -145,6 +152,10 @@ export function SentToggle({
 
   const onPress = () => {
     if (busy) {
+      return;
+    }
+    if (readOnly) {
+      Alert.alert(CLOUD_READONLY_ALERT.title, CLOUD_READONLY_ALERT.message);
       return;
     }
     const label = SENT_KIND_LABEL[kind];
@@ -180,6 +191,7 @@ export function SentToggle({
     <SentButton
       active={active}
       busy={busy}
+      disabled={readOnly}
       idleLabel={idleLabel}
       activeLabel={activeLabel}
       onPress={onPress}

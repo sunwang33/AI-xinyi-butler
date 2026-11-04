@@ -1,22 +1,24 @@
 /**
- * 数据访问入口（依赖注入）：
- * - M2～M11：未登录，getRepository() 返回 SQLite 实现；
- * - 阶段 12（T56）：登录后在此按 A6 策略切换为 Supabase 实现，调用方无感知。
+ * 数据访问入口（依赖注入，M12 T56 起按登录态动态切换）：
+ * - 未登录：SqliteRepository，七张上云表读写 user_id IS NULL 的匿名行；
+ * - 登录后：SupabaseRepository（读本机同账号缓存、写 write-through 云端）。
  *
- * UI/业务模块一律 `const repo = await getRepository()`，不得直接 import SQLite 实现。
+ * 实例注册表在 ./registry（同步编排退出登录时也要重置，独立成模块避免依赖环）；
+ * 首登静默合并、水位增量同步由 src/lib/sync.ts 编排。
+ * UI/业务模块一律 `const repo = await getRepository()`，调用方无需感知切换。
  */
 import { getDatabase } from '../db';
+import { useAccountStore } from '../../features/account/authStore';
 import type { DataRepository } from './types';
-import { SqliteRepository } from './sqlite/SqliteRepository';
+import { getAnonRepository, getCloudRepository, resetCloudRepositories } from './registry';
 
-let repositoryPromise: Promise<DataRepository> | null = null;
-
-export function getRepository(): Promise<DataRepository> {
-  if (!repositoryPromise) {
-    repositoryPromise = getDatabase().then((db) => new SqliteRepository(db));
-  }
-  return repositoryPromise;
+export async function getRepository(): Promise<DataRepository> {
+  const db = await getDatabase();
+  const userId = useAccountStore.getState().session?.user?.id ?? null;
+  return userId ? getCloudRepository(db, userId) : getAnonRepository(db);
 }
+
+export { resetCloudRepositories };
 
 export { registerNotificationCanceller } from './notificationCanceller';
 export type { NotificationCanceller } from './notificationCanceller';

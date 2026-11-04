@@ -19,6 +19,7 @@ import type { FavoriteScope } from '../favorites/restore';
 import { buildFestivalSelectHref } from '../occasions/routes';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import { BoxNote, BoxTitle, DashedBox } from '../content/SectionParts';
+import { CLOUD_READONLY_ALERT, useCloudReadOnly, writeErrorMessage } from '../account/useCloudReadOnly';
 import { formatMarkedAt } from './format';
 import { findYearKind, SENT_KIND_LABEL } from './sentDecision';
 import { SentPastYears } from './SentPastYears';
@@ -104,6 +105,17 @@ export function SentMarksPanel({
 }) {
   const router = useRouter();
   const year = scope.key.year;
+  // 登录态离线：送出记录只读，状态章的取消操作拦截（G-A6）
+  const readOnly = useCloudReadOnly();
+  const handleUnmark = (id: string) => {
+    if (readOnly) {
+      Alert.alert(CLOUD_READONLY_ALERT.title, CLOUD_READONLY_ALERT.message);
+      return;
+    }
+    void api.unmark(id).catch((e: unknown) => {
+      Alert.alert('暂时没取消掉', writeErrorMessage(e, '请稍后再试。'));
+    });
+  };
 
   // ---- T51：通用版必须先选人，标记归属于所选的人 ----
   if (isGenericFestival) {
@@ -198,7 +210,7 @@ export function SentMarksPanel({
                 kind={kind}
                 record={yearRecords[index]}
                 busy={false}
-                onUnmark={(id) => void api.unmark(id)}
+                onUnmark={handleUnmark}
               />
             ))}
           </View>

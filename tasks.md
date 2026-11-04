@@ -748,6 +748,13 @@
 - **前置**：T55、T54。
 - **同步口径（G-A6 2026-11-04 定稿，以此为准）**：**不做离线写队列（outbox）**——曾考虑借鉴同类项目的 outbox 暂存方案，拍板后放弃；登录态离线为缓存只读，写入口由 T78 的 NetInfo 网络态统一禁用并提示。新增独立 `src/lib/sync.ts` 统一编排：首登静默合并（匿名行保留 UUID 上传、同行 `updated_at` 新者胜）、`last_pulled_at` 水位增量拉取（软删行在本机物理清除）、在线写路径「云端成功 → 回写本机」、退出时按用户选择清/留缓存；不要在各页面各写同步逻辑。T78 引入的 `@react-native-community/netinfo`（2026-11-02 已拍板纳入第一版）同时用于 AI 区「真断网即时提示」与云写入口禁用/联网恢复触发同步；「已联网但 Supabase 被阻断」仍按请求失败处理，不视为离线。
 
+> **完成记录（2026-11-04，代码完成，待 T58 真机收口）**：四波落地，全程不改 Repository 接口、未登录路径零回归（15 套件 157 测试全绿）。
+> ① 迁移与纯函数：迁移 002 建 `sync_cursors(user_id, table_name, last_pulled_at)`；七张上云表的行映射（`cloudRows.ts` *ToCloud/normalize*）、本机遇难数据辅助（`localCache.ts`：列白名单 upsert、匿名行认领、账号缓存清除、水位读写）；冲突裁决纯函数在 `src/lib/syncMerge.ts`（CLOUD_TABLES 固定七表序、`updated_at` 新者胜），单测 13 条。
+> ② 云端仓储与动态注入：`SupabaseRepository`（`repository/supabase/`）组合按账号作用域的 `SqliteRepository(db, userId)`——读全部走本机同构缓存；写 write-through「云端 `.insert/update().select().single()` 成功 → 回写缓存」，离线（NetInfo type=none）直接抛中文错；snapshot/card_states/sent_records 因 COALESCE 唯一索引不能作 onConflict 目标，改为五元组(+kind) SELECT（不过滤 deleted，命中软删行则 PATCH 复活）再 PATCH/INSERT；删人云端按 persons→anniversaries/traits→四张内容表顺序 await 软删（无跨表事务，部分失败靠水位补偿），再由 SQLite 内层物理级联（含已调度通知取消钩子）。`registry.ts` 按 userId 缓存仓储实例，`repository/index.ts getRepository()` 按会话动态返回匿名/云端仓储；SQLite 三层全部加 `scopeUserId` 作用域（默认 null，`user_id IS ?` 单参数兼容匿名/登录）。
+> ③ 同步编排 `src/lib/sync.ts`：首登静默合并（批量查 remote 时间戳→新者胜筛选→`upsert(onConflict:'id')` 保留 UUID 与原 created_at/updated_at→claim 匿名行）；水位增量拉取按 CLOUD_TABLES **反序**（子表先、persons 最后，避开外键级联竞争），deleted=true 物理删并取消待送达通知，游标存本轮最大 updated_at、失败不推进；每账号一条 Promise 链串行；触发点＝登录等待首同步、冷启动/回前台（AppState active）、写后 8s 防抖；离线静默跳过、失败只记录不打扰。退出 `performSignOut('clear'|'keep')`：先云端 signOut（网络失败中文报错中止），再清/留缓存与仓储实例；设置页弹窗三按钮（取消 / 保留在本机 / 清除本机缓存（推荐）），文案说明提醒设置与通知记录始终保留。
+> ④ 写入口只读接线（G-A6）：新增 `features/account/useCloudReadOnly.ts`（已登录且设备离线＝只读）与统一拦截文案/错误消息工具。人员保存与删除按钮置灰；收藏开关/取消收藏、已送出标记/取消、贺卡翻页/手写/换模板全部在只读态禁用并弹统一说明，在线写失败展示云端真实中文原因（原先多处静默吞错或通用文案）；贺卡默认行在只读态写不进时降级为只读占位，不卡转圈。仅本机的四张表（节日关注、全局/单人提醒设置）离线照常可写，未误伤；AI 区沿用 T78 自身网络门控。登录页 await 首同步后再进首页；根布局 dbReady 后 `initSync()`。
+> **待 T58 真机验收**：卸载重装恢复、登录后离线只读各写入口、未登录全路径回归、首登静默合并（建议用「网络测试」人员含真实祝福/礼物快照）、退出清/留两路径与换号隔离。
+
 ### T57　AI 网关搬回国、登录鉴权与服务说明补充（G-NET 2026-11-04 调整）
 
 - **做什么**：按 G-NET 定稿把 `generate-content` 从 Supabase Edge Functions 移植为腾讯云上海主机上的 Node 小服务（`server/` 新目录，PM2/systemd 常驻；prompt/rate_limit 原样迁移），经备案子域 `/api/generate` 之类路径暴露，Nginx 限路径转发；服务对已登录用户校验 Supabase JWT（向反代后的 Supabase `/auth/v1/user` 或验签），同时保留未登录用户的匿名限频通道（未登录必须可完整使用）；App 端生成接口的 base URL 按登录/通道配置切换。通知仍全部走本地调度、不引入云端推送；继续不使用 Storage；服务说明补充账号信息与云端数据用途。Supabase Edge 上旧函数的去留（停用或保留为备用）实施时记录。

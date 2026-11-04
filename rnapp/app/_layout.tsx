@@ -7,6 +7,7 @@ import { useFonts } from 'expo-font';
 import { getDatabase } from '../src/data/db';
 import { useAccountStore } from '../src/features/account/authStore';
 import { initNetwork } from '../src/lib/network';
+import { initSync } from '../src/lib/sync';
 import { initializeReminders } from '../src/features/reminders/scheduler';
 import {
   NotoSansSC_400Regular,
@@ -84,6 +85,8 @@ export default function RootLayout() {
     initializeReminders().catch((error: unknown) => {
       console.error('[reminders] 初始化失败', error);
     });
+    // T56：挂接触发点（登录/冷启动恢复→首登合并；回前台/写后→增量拉取）
+    initSync();
   }, [dbReady]);
 
   useEffect(() => {

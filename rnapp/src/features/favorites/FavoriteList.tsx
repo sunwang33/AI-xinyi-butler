@@ -8,7 +8,7 @@
  * - 内容全部来自收藏那一刻的完整快照，离线可见、不受之后重新生成影响。
  */
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { Chip, EmptyState, Sheet, Stamp } from '../../components';
@@ -27,6 +27,7 @@ import { FavoriteCardSheet } from './FavoriteCardSheet';
 import { FavoriteTypeTag } from './FavoriteTypeTag';
 import { favoriteMetaLine } from './restore';
 import { useFavorites } from './useFavorites';
+import { CLOUD_READONLY_ALERT, useCloudReadOnly, writeErrorMessage } from '../account/useCloudReadOnly';
 
 type Filter = 'all' | ContentKind;
 
@@ -115,8 +116,8 @@ function ContentCard({ children }: { children: ReactNode }) {
   );
 }
 
-/** 卡底部操作行：左取消收藏（书签）、右主动作 */
-function CardActions({ onRemove, action }: { onRemove: () => void; action: ReactNode }) {
+/** 卡底部操作行：左取消收藏（书签）、右主动作；只读模式下 onRemove 传 null 不渲染 */
+function CardActions({ onRemove, action }: { onRemove: (() => void) | null; action: ReactNode }) {
   return (
     <View
       style={{
@@ -126,7 +127,7 @@ function CardActions({ onRemove, action }: { onRemove: () => void; action: React
         marginTop: spacing.sm,
       }}
     >
-      <BookmarkButton active activeLabel="取消收藏" onPress={onRemove} />
+      {onRemove ? <BookmarkButton active activeLabel="取消收藏" onPress={onRemove} /> : <View />}
       {action}
     </View>
   );
@@ -138,6 +139,19 @@ export function FavoriteList() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [giftTarget, setGiftTarget] = useState<Favorite | null>(null);
   const [cardTarget, setCardTarget] = useState<Favorite | null>(null);
+  // 登录态离线：收藏为云表，整列只读，不渲染「取消收藏」（G-A6）
+  const readOnly = useCloudReadOnly();
+
+  /** 取消收藏：只读拦截；云端失败展示真实原因 */
+  const handleRemove = (id: string) => {
+    if (readOnly) {
+      Alert.alert(CLOUD_READONLY_ALERT.title, CLOUD_READONLY_ALERT.message);
+      return;
+    }
+    void removeById(id).catch((e: unknown) => {
+      Alert.alert('操作失败', writeErrorMessage(e, '请稍后重试。'));
+    });
+  };
 
   const onCopy = async (fav: Favorite) => {
     const text = (fav.payload as BlessingPayload).text;
@@ -184,7 +198,7 @@ export function FavoriteList() {
               {text}
             </Text>
             <CardActions
-              onRemove={() => void removeById(fav.id)}
+              onRemove={readOnly ? null : () => handleRemove(fav.id)}
               action={
                 <Pressable
                   accessibilityRole="button"
@@ -256,7 +270,7 @@ export function FavoriteList() {
               </View>
             </View>
             <CardActions
-              onRemove={() => void removeById(fav.id)}
+              onRemove={readOnly ? null : () => handleRemove(fav.id)}
               action={<ActionPill label="去看看" onPress={() => setGiftTarget(fav)} />}
             />
           </ContentCard>
@@ -304,7 +318,7 @@ export function FavoriteList() {
             </View>
           </View>
           <CardActions
-            onRemove={() => void removeById(fav.id)}
+            onRemove={readOnly ? null : () => handleRemove(fav.id)}
             action={<ActionPill label="导出图片" onPress={() => setCardTarget(fav)} />}
           />
         </ContentCard>

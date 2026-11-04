@@ -21,10 +21,11 @@
  * setState（避免级联渲染）；写库结果在 await 之后的微任务中回填。
  */
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Pressable, Text, View } from 'react-native';
 import { Button, Card, Sheet, TextField } from '../../components';
 import type { CardPayload, CardState, OccasionKey, Person } from '../../data/entities';
 import { getRepository } from '../../data/repository';
+import { CLOUD_READONLY_ALERT, useCloudReadOnly, writeErrorMessage } from '../account/useCloudReadOnly';
 import { FavoriteToggle } from '../favorites/FavoriteToggle';
 import type { FavoriteScope } from '../favorites/restore';
 import type { FavoriteStateApi } from '../favorites/useFavorites';
@@ -67,8 +68,12 @@ export function CardSection({
   sentApi: SentStateApi;
 }) {
   const [card, setCard] = useState<CardState | null>(null);
+  // 默认卡状态行写入失败（登录态离线等只读情形）：贺卡区降级为只读占位，恢复网络后重进页面即可
+  const [cardLoadFailed, setCardLoadFailed] = useState(false);
   // 当年祝福快照首屏值（挂载时从仓储读，离线可看）
   const [loadedBlessings, setLoadedBlessings] = useState<string[] | null>(null);
+  // 登录态离线：贺卡模板 / 手写 / 翻页均为云表写，只读（G-A6）；导出图片不受影响
+  const readOnly = useCloudReadOnly();
   // 同页「重新生成」落库后的最新快照（经广播通道推送），优先于首屏值
   const liveSnapshot = useBroadcastSnapshot(occasionKey);
   // 手写弹层与其草稿（草稿不直接改库，点保存才落库）
@@ -124,17 +129,25 @@ export function CardSection({
     let active = true;
     (async () => {
       const repo = await getRepository();
-      const existing = await repo.getCardState(occasionKey);
-      const state =
-        existing ??
-        (await repo.upsertCardState({
-          ...occasionKey,
-          templateCode: DEFAULT_CARD_TEMPLATE,
-          selectedIndex: 0,
-          editedText: null,
-        }));
-      if (!active) return;
-      setCard(state);
+      try {
+        const existing = await repo.getCardState(occasionKey);
+        // 只读模式下默认行写不进去：getCardState 命中缓存仍可正常展示，否则降级占位
+        const state =
+          existing ??
+          (await repo.upsertCardState({
+            ...occasionKey,
+            templateCode: DEFAULT_CARD_TEMPLATE,
+            selectedIndex: 0,
+            editedText: null,
+          }));
+        if (!active) return;
+        setCard(state);
+      } catch (e) {
+        console.warn('[CardSection] 准备默认贺卡失败：', e);
+        if (active) {
+          setCardLoadFailed(true);
+        }
+      }
 
       const snapshot = await repo.getSnapshot(occasionKey).catch(() => null);
       if (active) {
@@ -180,26 +193,47 @@ export function CardSection({
       }
     : null;
 
-  // 局部落库：乐观更新，仓储只 SET 传入字段，故模板/选择/手写三者互不覆盖
+  // 局部落库：乐观更新，仓储只 SET 传入字段，故模板/选择/手写三者互不覆盖；
+  // 云端失败时回滚到操作前的状态并提示真实原因（登录态只读在入口已拦，这里兜在线失败）
   const persist = async (patch: { selectedIndex?: number; editedText?: string | null }) => {
     if (!card) return;
+    if (readOnly) {
+      Alert.alert(CLOUD_READONLY_ALERT.title, CLOUD_READONLY_ALERT.message);
+      return;
+    }
+    const previous = card;
     setCard({ ...card, ...patch });
-    const repo = await getRepository();
-    const saved = await repo.upsertCardState({
-      ...occasionKey,
-      templateCode: card.templateCode,
-      ...patch,
-    });
-    setCard(saved);
+    try {
+      const repo = await getRepository();
+      const saved = await repo.upsertCardState({
+        ...occasionKey,
+        templateCode: card.templateCode,
+        ...patch,
+      });
+      setCard(saved);
+    } catch (e) {
+      setCard(previous);
+      Alert.alert('保存失败', writeErrorMessage(e, '请稍后重试。'));
+    }
   };
 
   const onSelectTemplate = async (code: string) => {
     if (!card || code === card.templateCode) return;
+    if (readOnly) {
+      Alert.alert(CLOUD_READONLY_ALERT.title, CLOUD_READONLY_ALERT.message);
+      return;
+    }
     // 乐观切换：立即响应，落库后以库内完整行回写（selectedIndex / editedText 不丢）
+    const previous = card;
     setCard({ ...card, templateCode: code });
-    const repo = await getRepository();
-    const saved = await repo.upsertCardState({ ...occasionKey, templateCode: code });
-    setCard(saved);
+    try {
+      const repo = await getRepository();
+      const saved = await repo.upsertCardState({ ...occasionKey, templateCode: code });
+      setCard(saved);
+    } catch (e) {
+      setCard(previous);
+      Alert.alert('切换失败', writeErrorMessage(e, '请稍后重试。'));
+    }
   };
 
   const goPage = (next: number) => {
@@ -210,6 +244,10 @@ export function CardSection({
   };
 
   const openEditor = () => {
+    if (readOnly) {
+      Alert.alert(CLOUD_READONLY_ALERT.title, CLOUD_READONLY_ALERT.message);
+      return;
+    }
     // 预填当前贺卡文字：手写则填手写，否则填当前这条 AI 原文，方便在其基础上微调
     setDraft(wish ?? '');
     setEditorVisible(true);
@@ -234,7 +272,11 @@ export function CardSection({
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
       {pageCount >= 2 ? (
         <>
-          <PagerButton glyph="‹" disabled={!canPage || safeIndex === 0} onPress={() => goPage(safeIndex - 1)} />
+          <PagerButton
+            glyph="‹"
+            disabled={readOnly || !canPage || safeIndex === 0}
+            onPress={() => goPage(safeIndex - 1)}
+          />
           <Text style={{ fontFamily: fonts.sans, fontSize: fontSize.small, color: colors.inkSoft }}>
             {isHandwritten ? (
               '我的手写'
@@ -249,7 +291,7 @@ export function CardSection({
           </Text>
           <PagerButton
             glyph="›"
-            disabled={!canPage || safeIndex === pageCount - 1}
+            disabled={readOnly || !canPage || safeIndex === pageCount - 1}
             onPress={() => goPage(safeIndex + 1)}
           />
           <View style={{ width: 1, height: 16, backgroundColor: colors.line }} />
@@ -259,6 +301,7 @@ export function CardSection({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="手写编辑祝福"
+        disabled={readOnly}
         onPress={openEditor}
         style={({ pressed }) => ({
           height: 26,
@@ -269,7 +312,7 @@ export function CardSection({
           backgroundColor: colors.paper,
           alignItems: 'center',
           justifyContent: 'center',
-          opacity: pressed ? 0.7 : 1,
+          opacity: readOnly ? 0.4 : pressed ? 0.7 : 1,
         })}
       >
         <Text style={{ fontFamily: fonts.sans, fontSize: fontSize.footnote, color: colors.pineDeep }}>
@@ -298,9 +341,33 @@ export function CardSection({
               backgroundColor: colors.mistDeep,
               alignItems: 'center',
               justifyContent: 'center',
+              padding: spacing.md,
             }}
           >
-            <ActivityIndicator color={colors.pine} />
+            {cardLoadFailed ? (
+              <>
+                <Image
+                  source={getCardTemplate(DEFAULT_CARD_TEMPLATE).art}
+                  style={{ width: 60, height: 80, borderRadius: radius.sm }}
+                />
+                <Text
+                  style={{
+                    marginTop: spacing.sm,
+                    fontFamily: fonts.sans,
+                    fontSize: fontSize.footnote,
+                    lineHeight: 19,
+                    color: colors.inkFaint,
+                    textAlign: 'center',
+                  }}
+                >
+                  {readOnly
+                    ? '离线只读模式下暂不能准备贺卡，恢复网络后回到本页即可编辑、收藏与发送。'
+                    : '贺卡暂时准备不了，请稍后再打开本页试试。'}
+                </Text>
+              </>
+            ) : (
+              <ActivityIndicator color={colors.pine} />
+            )}
           </View>
         ) : (
           <>
@@ -402,8 +469,9 @@ export function CardSection({
                       key={tpl.code}
                       accessibilityRole="button"
                       accessibilityLabel={`切换到${tpl.name}模板`}
-                      onPress={() => onSelectTemplate(tpl.code)}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                      disabled={readOnly}
+                      onPress={() => void onSelectTemplate(tpl.code)}
+                      style={({ pressed }) => ({ opacity: readOnly ? 0.4 : pressed ? 0.7 : 1 })}
                     >
                       <Image
                         source={tpl.art}

@@ -12,6 +12,7 @@ import { AnniversaryEditor, ErrorText } from './AnniversaryEditor';
 import { TraitEditor } from './TraitEditor';
 import { MAX_TRAITS } from './personFormSchema';
 import { type PersonFormInitial, type PersonFormMode, usePersonForm } from './usePersonForm';
+import { CLOUD_READONLY_ALERT, useCloudReadOnly, writeErrorMessage } from '../account/useCloudReadOnly';
 
 /** 卡片内分区小标题 */
 function SectionTitle({ children, required = false }: { children: ReactNode; required?: boolean }) {
@@ -48,10 +49,16 @@ export function PersonForm({
 }) {
   const form = usePersonForm(mode, initial);
   const { values, errors, submitting } = form;
+  // 登录态离线时七张云表只读：保存按钮置灰（G-A6）
+  const readOnly = useCloudReadOnly();
 
-  /** 保存：校验不过给行内提示 + Alert；落库异常给失败提示 */
+  /** 保存：只读模式直接拦截；校验不过给行内提示 + Alert；落库异常展示云端真实原因 */
   const handleSave = async () => {
     Keyboard.dismiss();
+    if (readOnly) {
+      Alert.alert(CLOUD_READONLY_ALERT.title, CLOUD_READONLY_ALERT.message);
+      return;
+    }
     try {
       const person = await form.submit();
       if (!person) {
@@ -59,8 +66,8 @@ export function PersonForm({
         return;
       }
       onSaved(person.id);
-    } catch {
-      Alert.alert('保存失败', '请稍后重试。');
+    } catch (e) {
+      Alert.alert('保存失败', writeErrorMessage(e, '请稍后重试。'));
     }
   };
 
@@ -199,7 +206,7 @@ export function PersonForm({
         />
       </Card>
 
-      <Button title="保存" block loading={submitting} onPress={handleSave} />
+      <Button title="保存" block loading={submitting} disabled={readOnly} onPress={handleSave} />
       {footer ? <View style={{ marginTop: spacing.lg, alignItems: 'center' }}>{footer}</View> : null}
     </Screen>
   );

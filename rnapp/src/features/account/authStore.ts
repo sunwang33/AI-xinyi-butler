@@ -3,9 +3,9 @@ import type { Session } from '@supabase/supabase-js';
 import { PASSWORD_RESET_PAGE_URL, supabase } from '../../lib/supabase';
 
 /**
- * 账号状态（T55，2026-10-28 提前实施）。
- * 只管 Supabase Auth 登录态：邮箱密码登录、忘记密码发信、退出。
- * 云端数据表与同步仍在 M12（T54/T56），当前登录态不影响本机数据读写。
+ * 账号状态（T55；M12 T56 起登录态决定数据读写链路）。
+ * 只管 Supabase Auth 登录态：邮箱密码登录、忘记密码发信。
+ * 退出登录在 lib/sync.performSignOut（还要清/留本机缓存与仓储实例），不在本 store。
  */
 
 type AuthErrorInfo = { message?: string };
@@ -45,12 +45,10 @@ type AccountState = {
   ready: boolean;
   /** App 启动时调用一次：恢复会话并订阅登录态变化 */
   initialize: () => void;
-  /** 邮箱 + 密码登录；失败时抛出中文 Error */
-  signIn: (email: string, password: string) => Promise<void>;
+  /** 邮箱 + 密码登录；失败时抛出中文 Error，成功返回账号 id（供首登同步使用） */
+  signIn: (email: string, password: string) => Promise<string>;
   /** 发送忘记密码重置邮件（回跳到公网重置页）；失败时抛出中文 Error */
   sendPasswordReset: (email: string) => Promise<void>;
-  /** 退出登录 */
-  signOut: () => Promise<void>;
 };
 
 let initialized = false;
@@ -77,8 +75,9 @@ export const useAccountStore = create<AccountState>((set) => ({
   },
 
   signIn: async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw translateError(error);
+    return data.user?.id ?? '';
   },
 
   sendPasswordReset: async (email) => {
@@ -88,10 +87,5 @@ export const useAccountStore = create<AccountState>((set) => ({
     if (error) throw translateError(error);
     // 注意：Supabase 对已注册/未注册邮箱统一返回成功（防账号枚举），
     // 页面提示应表述为「若该邮箱已注册，重置邮件已发送」。
-  },
-
-  signOut: async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw translateError(error);
   },
 }));

@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { AppHeader, Button, ListRow, Screen } from '../../src/components';
 import { colors, fontSize, spacing } from '../../src/theme/tokens';
 import { useAccountStore } from '../../src/features/account/authStore';
+import { performSignOut } from '../../src/lib/sync';
+import { useOnline } from '../../src/lib/network';
 import type { AppSettings } from '../../src/data/entities';
 import { GlobalSettingsSection } from '../../src/features/settings/GlobalSettingsSection';
 import { PersonReminderSection } from '../../src/features/settings/PersonReminderSection';
@@ -33,28 +35,40 @@ export default function SettingsScreen() {
   const router = useRouter();
   const session = useAccountStore((s) => s.session);
   const ready = useAccountStore((s) => s.ready);
-  const signOut = useAccountStore((s) => s.signOut);
   const email = session?.user.email ?? '';
+  const online = useOnline();
 
   // 全局天数由全局分区回传，供单人分区拼「跟随全局（提前 N 天）」摘要
   const [globalAdvanceDays, setGlobalAdvanceDays] = useState(3);
   const handleSettingsChange = (s: AppSettings) => setGlobalAdvanceDays(s.globalAdvanceDays);
+  // 退出请求进行中：禁用按钮，避免重复提交（G-A6 弹窗二选一）
+  const [signingOut, setSigningOut] = useState(false);
 
+  const doSignOut = async (choice: 'clear' | 'keep') => {
+    setSigningOut(true);
+    try {
+      await performSignOut(choice);
+      // 会话变化会自动把账号区切回未登录态，无需跳转
+    } catch (e) {
+      Alert.alert('退出失败', e instanceof Error ? e.message : '请稍后重试');
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
+  /** G-A6：退出弹窗二选一——清除本机缓存（默认推荐）或保留在本机；四张仅本机表始终保留 */
   const handleSignOut = () => {
-    Alert.alert('退出登录', '退出后云端同步将暂停，本机已保存的数据不受影响。确定退出吗？', [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '退出',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await signOut();
-          } catch (e) {
-            Alert.alert('退出失败', e instanceof Error ? e.message : '请稍后重试');
-          }
-        },
-      },
-    ]);
+    if (signingOut) return;
+    Alert.alert(
+      '退出登录',
+      '退出后云端同步暂停。清除本机缓存后，下次用同一账号登录会自动从云端恢复；' +
+        '选择保留则数据留在本机。无论选哪个，提醒设置与通知记录都会保留。',
+      [
+        { text: '取消', style: 'cancel' },
+        { text: '保留在本机', onPress: () => void doSignOut('keep') },
+        { text: '清除本机缓存（推荐）', onPress: () => void doSignOut('clear') },
+      ],
+    );
   };
 
   return (
@@ -79,7 +93,7 @@ export default function SettingsScreen() {
         <ListRow title="服务说明" showChevron onPress={() => router.push('/service-notice')} />
       </View>
 
-      {/* ④ 账号区：T55 已提前实施；云端数据同步将在 M12 开放 */}
+      {/* ④ 账号区：T55 登录 + T56 云端同步（登录态数据自动同步，离线时只读） */}
       <View style={{ marginBottom: spacing.lg }}>
         <SectionTitle>账号</SectionTitle>
         {ready && session ? (
@@ -87,12 +101,14 @@ export default function SettingsScreen() {
             <ListRow
               avatar={email.slice(0, 1).toUpperCase()}
               title={email}
-              subtitle="已登录 · 云端数据同步将在后续版本开放"
+              subtitle={online ? '已登录 · 数据自动同步到云端' : '已登录 · 离线模式（仅可查看）'}
             />
             <Button
               title="退出登录"
               block
               variant="ghost"
+              loading={signingOut}
+              disabled={signingOut}
               style={{ marginTop: spacing.sm }}
               onPress={handleSignOut}
             />

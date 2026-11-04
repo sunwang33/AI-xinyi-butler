@@ -49,11 +49,19 @@ export class SqliteRepository implements DataRepository {
   private readonly settings: SqliteSettingsRepository;
   private readonly content: SqliteContentRepository;
 
-  constructor(db: SQLiteDatabase) {
+  /**
+   * @param scopeUserId 用户作用域：null=匿名仓储（未登录，只读写 user_id IS NULL）；
+   *   传入账号 id 时为该账号的登录态缓存仓储（T56，被 SupabaseRepository 组合）。
+   *   settings 子仓储管理四张仅本机表，不接受作用域。
+   */
+  constructor(
+    db: SQLiteDatabase,
+    private readonly scopeUserId: string | null = null,
+  ) {
     this.db = db;
-    this.persons = new SqlitePersonRepository(db);
+    this.persons = new SqlitePersonRepository(db, scopeUserId);
     this.settings = new SqliteSettingsRepository(db);
-    this.content = new SqliteContentRepository(db);
+    this.content = new SqliteContentRepository(db, scopeUserId);
   }
 
   // ---------- 人员（T08） ----------

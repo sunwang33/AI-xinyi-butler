@@ -1,12 +1,13 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { Migration } from './types';
 import migration001 from './001_init';
+import migration002 from './002_sync_cursors';
 
 /**
  * 迁移注册表：严格按 version 升序追加。
  * 每个版本在应用的一生中只执行一次，执行记录保存在 schema_migrations 表。
  */
-export const migrations: readonly Migration[] = [migration001];
+export const migrations: readonly Migration[] = [migration001, migration002];
 
 /** 当前代码期望的数据库 schema 版本 */
 export const LATEST_SCHEMA_VERSION = migrations[migrations.length - 1].version;

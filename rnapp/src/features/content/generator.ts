@@ -109,7 +109,12 @@ async function runGenerate(
       return { snapshot, fallbackUsed: true };
     }
 
-    await saveSnapshot(repo, key, { ...key, status: 'failed', failCount });
+    // 失败状态行本身也可能写不进去（如登录态离线只读）：此时保留原始生成错误，不再覆盖
+    try {
+      await saveSnapshot(repo, key, { ...key, status: 'failed', failCount });
+    } catch (persistError) {
+      console.warn('[generator] 失败状态落库未果：', persistError);
+    }
     throw err as ContentError;
   }
 }

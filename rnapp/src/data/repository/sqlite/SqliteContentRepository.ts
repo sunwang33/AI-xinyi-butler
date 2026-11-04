@@ -42,12 +42,25 @@ import {
  * 故 upsert 一律「事务内先按业务键 SELECT，再 UPDATE / INSERT」。
  */
 export class SqliteContentRepository implements ContentRepository {
-  constructor(private readonly db: SQLiteDatabase) {}
+  /**
+   * @param scopeUserId 读作用户：null=匿名行（未登录，M2～M11 原行为）；
+   *   具体 id=登录态只读写该账号的缓存行（T56）；notification_log 无 user_id 列，不受影响
+   */
+  constructor(
+    private readonly db: SQLiteDatabase,
+    private readonly scopeUserId: string | null = null,
+  ) {}
+
+  /** 七张云表读 SQL 的用户作用域片段（IS 对 NULL 与具体 id 都成立） */
+  private static readonly USER_SCOPE = 'user_id IS ?';
 
   // ---------- 心意快照 ----------
 
   async getSnapshot(key: OccasionKey): Promise<ContentSnapshot | null> {
-    const match = occasionMatcher(key, { withUser: true });
+    const match = occasionMatcher(key, {
+      includeUserScope: true,
+      scopeUserId: this.scopeUserId,
+    });
     const row = await this.db.getFirstAsync<SnapshotRow>(
       `SELECT * FROM content_snapshots WHERE ${match.sql} AND deleted = 0 LIMIT 1`,
       ...match.params,
@@ -63,7 +76,10 @@ export class SqliteContentRepository implements ContentRepository {
       festivalCode: input.festivalCode,
       year: input.year,
     };
-    const match = occasionMatcher(key, { withUser: true });
+    const match = occasionMatcher(key, {
+      includeUserScope: true,
+      scopeUserId: this.scopeUserId,
+    });
 
     await this.db.withTransactionAsync(async () => {
       const existing = await this.db.getFirstAsync<Pick<SnapshotRow, 'id'>>(
@@ -92,7 +108,7 @@ export class SqliteContentRepository implements ContentRepository {
              (id, person_id, occasion_type, anniversary_id, festival_code, year,
               blessings, gifts, status, fail_count, generated_at,
               user_id, created_at, updated_at, deleted)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
           uuid(),
           key.personId ?? null,
           key.occasionType,
@@ -104,6 +120,7 @@ export class SqliteContentRepository implements ContentRepository {
           input.status ?? 'pending',
           input.failCount ?? 0,
           input.generatedAt ?? null,
+          this.scopeUserId,
           ts,
           ts,
         );
@@ -140,7 +157,10 @@ export class SqliteContentRepository implements ContentRepository {
   // ---------- 贺卡组合状态 ----------
 
   async getCardState(key: OccasionKey): Promise<CardState | null> {
-    const match = occasionMatcher(key, { withUser: true });
+    const match = occasionMatcher(key, {
+      includeUserScope: true,
+      scopeUserId: this.scopeUserId,
+    });
     const row = await this.db.getFirstAsync<CardStateRow>(
       `SELECT * FROM card_states WHERE ${match.sql} AND deleted = 0 LIMIT 1`,
       ...match.params,
@@ -156,7 +176,10 @@ export class SqliteContentRepository implements ContentRepository {
       festivalCode: input.festivalCode,
       year: input.year,
     };
-    const match = occasionMatcher(key, { withUser: true });
+    const match = occasionMatcher(key, {
+      includeUserScope: true,
+      scopeUserId: this.scopeUserId,
+    });
 
     await this.db.withTransactionAsync(async () => {
       const existing = await this.db.getFirstAsync<Pick<CardStateRow, 'id'>>(
@@ -176,7 +199,7 @@ export class SqliteContentRepository implements ContentRepository {
           `INSERT INTO card_states
              (id, person_id, occasion_type, anniversary_id, festival_code, year,
               template_code, selected_index, edited_text, user_id, created_at, updated_at, deleted)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
           uuid(),
           key.personId ?? null,
           key.occasionType,
@@ -186,6 +209,7 @@ export class SqliteContentRepository implements ContentRepository {
           input.templateCode,
           input.selectedIndex ?? 0,
           input.editedText ?? null,
+          this.scopeUserId,
           ts,
           ts,
         );
@@ -204,7 +228,7 @@ export class SqliteContentRepository implements ContentRepository {
       `INSERT INTO favorites
          (id, kind, person_id, person_label, occasion_type, anniversary_id, festival_code,
           occasion_name, year, payload, user_id, created_at, updated_at, deleted)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
       id,
       input.kind,
       input.personId,
@@ -215,6 +239,7 @@ export class SqliteContentRepository implements ContentRepository {
       input.occasionName,
       input.year,
       toJson(input.payload),
+      this.scopeUserId,
       ts,
       ts,
     );
@@ -224,8 +249,9 @@ export class SqliteContentRepository implements ContentRepository {
 
   async getFavorite(id: string): Promise<Favorite | null> {
     const row = await this.db.getFirstAsync<FavoriteRow>(
-      'SELECT * FROM favorites WHERE id = ? AND deleted = 0',
+      'SELECT * FROM favorites WHERE id = ? AND deleted = 0 AND user_id IS ?',
       id,
+      this.scopeUserId,
     );
     return row ? mapFavorite(row) : null;
   }
@@ -238,14 +264,17 @@ export class SqliteContentRepository implements ContentRepository {
   async listFavorites(filter?: { kind?: ContentKind }): Promise<Favorite[]> {
     if (filter?.kind) {
       const rows = await this.db.getAllAsync<FavoriteRow>(
-        `SELECT * FROM favorites WHERE deleted = 0 AND kind = ?
+        `SELECT * FROM favorites WHERE deleted = 0 AND ${SqliteContentRepository.USER_SCOPE} AND kind = ?
          ORDER BY created_at DESC, id DESC`,
+        this.scopeUserId,
         filter.kind,
       );
       return rows.map(mapFavorite);
     }
     const rows = await this.db.getAllAsync<FavoriteRow>(
-      'SELECT * FROM favorites WHERE deleted = 0 ORDER BY created_at DESC, id DESC',
+      `SELECT * FROM favorites WHERE deleted = 0 AND ${SqliteContentRepository.USER_SCOPE}
+       ORDER BY created_at DESC, id DESC`,
+      this.scopeUserId,
     );
     return rows.map(mapFavorite);
   }
@@ -255,13 +284,16 @@ export class SqliteContentRepository implements ContentRepository {
   async markSent(input: SentRecordCreate): Promise<SentRecord> {
     const ts = now();
     // 业务键：人 × 日子 × 年份 × kind（与 ux_sent_record 对应）
-    const match = occasionMatcher({
-      occasionType: input.occasionType,
-      personId: input.personId,
-      anniversaryId: input.anniversaryId,
-      festivalCode: input.festivalCode,
-      year: input.year,
-    });
+    const match = occasionMatcher(
+      {
+        occasionType: input.occasionType,
+        personId: input.personId,
+        anniversaryId: input.anniversaryId,
+        festivalCode: input.festivalCode,
+        year: input.year,
+      },
+      { includeUserScope: true, scopeUserId: this.scopeUserId },
+    );
 
     await this.db.withTransactionAsync(async () => {
       const existing = await this.db.getFirstAsync<Pick<SentRecordRow, 'id'>>(
@@ -284,7 +316,7 @@ export class SqliteContentRepository implements ContentRepository {
           `INSERT INTO sent_records
              (id, person_id, occasion_type, anniversary_id, festival_code, year, kind,
               payload, marked_at, user_id, created_at, updated_at, deleted)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
           uuid(),
           input.personId,
           input.occasionType,
@@ -293,6 +325,7 @@ export class SqliteContentRepository implements ContentRepository {
           input.year,
           input.kind,
           toJson(input.payload),
+          this.scopeUserId,
           ts,
           ts,
           ts,
@@ -317,8 +350,9 @@ export class SqliteContentRepository implements ContentRepository {
 
   async getSentRecord(id: string): Promise<SentRecord | null> {
     const row = await this.db.getFirstAsync<SentRecordRow>(
-      'SELECT * FROM sent_records WHERE id = ? AND deleted = 0',
+      'SELECT * FROM sent_records WHERE id = ? AND deleted = 0 AND user_id IS ?',
       id,
+      this.scopeUserId,
     );
     return row ? mapSentRecord(row) : null;
   }
@@ -327,12 +361,14 @@ export class SqliteContentRepository implements ContentRepository {
     const rows = await this.db.getAllAsync<SentRecordRow>(
       `SELECT * FROM sent_records
        WHERE deleted = 0
+         AND ${SqliteContentRepository.USER_SCOPE}
          AND person_id = ?
          AND occasion_type = ?
          AND anniversary_id IS ?
          AND festival_code IS ?
          ${query.kind ? 'AND kind = ?' : ''}
        ORDER BY year DESC, marked_at DESC`,
+      this.scopeUserId,
       query.personId,
       query.occasionType,
       query.anniversaryId ?? null,
@@ -356,7 +392,9 @@ export class SqliteContentRepository implements ContentRepository {
               INNER JOIN persons p ON p.id = sr.person_id
               LEFT JOIN anniversaries a ON a.id = sr.anniversary_id
         WHERE sr.deleted = 0
+          AND sr.user_id IS ?
         ORDER BY sr.marked_at DESC, sr.id DESC`,
+      this.scopeUserId,
     );
     return rows.map(mapSentTimelineRow);
   }

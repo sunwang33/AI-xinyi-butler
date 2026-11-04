@@ -10,6 +10,7 @@ import { Alert, Pressable, StyleProp, Text, ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import type { ContentKind, ContentPayload } from '../../data/entities';
 import { colors, fonts, fontSize } from '../../theme/tokens';
+import { CLOUD_READONLY_ALERT, useCloudReadOnly, writeErrorMessage } from '../account/useCloudReadOnly';
 import { FAVORITE_LIMIT, findFavorite } from './fingerprint';
 import { buildFavoriteCreate, type FavoriteScope } from './restore';
 import type { FavoriteStateApi } from './useFavorites';
@@ -33,6 +34,7 @@ export function BookmarkIcon({ filled, color }: { filled: boolean; color: string
 export function BookmarkButton({
   active,
   busy = false,
+  disabled = false,
   idleLabel = '收藏',
   activeLabel = '已收藏',
   onPress,
@@ -40,22 +42,25 @@ export function BookmarkButton({
 }: {
   active: boolean;
   busy?: boolean;
+  /** 只读模式（登录态离线）置灰，不响应点击 */
+  disabled?: boolean;
   idleLabel?: string;
   activeLabel?: string;
   onPress: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const color = active ? colors.honeyDeep : colors.inkSoft;
+  const dimmed = busy || disabled;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected: active, busy }}
+      accessibilityState={{ selected: active, busy, disabled }}
       accessibilityLabel={active ? activeLabel : idleLabel}
-      disabled={busy}
+      disabled={dimmed}
       onPress={onPress}
       hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
       style={({ pressed }) => [
-        { flexDirection: 'row', alignItems: 'center', gap: 5, opacity: busy ? 0.5 : pressed ? 0.6 : 1 },
+        { flexDirection: 'row', alignItems: 'center', gap: 5, opacity: dimmed ? 0.5 : pressed ? 0.6 : 1 },
         style,
       ]}
     >
@@ -92,10 +97,16 @@ export function FavoriteToggle({
   style?: StyleProp<ViewStyle>;
 }) {
   const [busy, setBusy] = useState(false);
+  // 登录态离线：收藏走云表，置灰拦截（G-A6）
+  const readOnly = useCloudReadOnly();
   const active = findFavorite(api.favorites ?? [], scope.key, kind, payload) !== null;
 
   const onPress = async () => {
     if (busy) {
+      return;
+    }
+    if (readOnly) {
+      Alert.alert(CLOUD_READONLY_ALERT.title, CLOUD_READONLY_ALERT.message);
       return;
     }
     setBusy(true);
@@ -107,6 +118,8 @@ export function FavoriteToggle({
           `最多收藏 ${FAVORITE_LIMIT} 条内容。先在「历史」Tab 的收藏里取消一些，再收藏新的吧。`,
         );
       }
+    } catch (e) {
+      Alert.alert('操作失败', writeErrorMessage(e, '请稍后重试。'));
     } finally {
       setBusy(false);
     }
@@ -116,6 +129,7 @@ export function FavoriteToggle({
     <BookmarkButton
       active={active}
       busy={busy}
+      disabled={readOnly}
       idleLabel={idleLabel}
       activeLabel={activeLabel}
       onPress={() => void onPress()}

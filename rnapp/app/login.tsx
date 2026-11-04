@@ -4,6 +4,7 @@ import { Redirect, useRouter } from 'expo-router';
 import { Button, Card, PageHeader, Screen, TextField } from '../src/components';
 import { colors, fonts, fontSize, spacing } from '../src/theme/tokens';
 import { useAccountStore } from '../src/features/account/authStore';
+import { firstSyncForUser } from '../src/lib/sync';
 
 /**
  * 登录页（plan 3.1 /login；T55，2026-10-28 由 OTP 改为邮箱 + 密码并提前实施）
@@ -55,7 +56,12 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      await signIn(trimmedEmail, password);
+      const userId = await signIn(trimmedEmail, password);
+      // 等待首登静默合并（匿名行上传+认领）与首次拉取完成再进首页，避免短暂数据空窗；
+      // 该承诺本身不会 reject（失败只记录，回前台/写入后自动重试）
+      if (userId) {
+        await firstSyncForUser(userId);
+      }
       router.replace('/(tabs)/remind');
     } catch (e) {
       setError(e instanceof Error ? e.message : '登录失败，请稍后重试');

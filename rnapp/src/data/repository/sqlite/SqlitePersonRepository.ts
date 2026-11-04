@@ -27,7 +27,15 @@ import {
  * 删除人员的跨表事务级联在聚合类 SqliteRepository.deletePerson 中实现。
  */
 export class SqlitePersonRepository implements Omit<PersonRepository, 'deletePerson'> {
-  constructor(private readonly db: SQLiteDatabase) {}
+  /**
+   * @param db 数据库连接
+   * @param scopeUserId 读作用户：null=只读写 user_id IS NULL 的匿名行（未登录，
+   *   与 M2～M11 行为完全一致）；具体 id=登录态缓存，只读该账号的行（T56）
+   */
+  constructor(
+    private readonly db: SQLiteDatabase,
+    private readonly scopeUserId: string | null = null,
+  ) {}
 
   // ---------- 人员 ----------
 
@@ -55,13 +63,19 @@ export class SqlitePersonRepository implements Omit<PersonRepository, 'deletePer
 
   getPerson(id: string): Promise<Person | null> {
     return this.db
-      .getFirstAsync<PersonRow>('SELECT * FROM persons WHERE id = ? AND deleted = 0', id)
+      .getFirstAsync<PersonRow>(
+        'SELECT * FROM persons WHERE id = ? AND deleted = 0 AND user_id IS ?',
+        id,
+        this.scopeUserId,
+      )
       .then((row) => (row ? mapPerson(row) : null));
   }
 
   async listPersons(): Promise<Person[]> {
     const rows = await this.db.getAllAsync<PersonRow>(
-      'SELECT * FROM persons WHERE deleted = 0 ORDER BY created_at ASC, id ASC',
+      `SELECT * FROM persons WHERE deleted = 0 AND user_id IS ?
+       ORDER BY created_at ASC, id ASC`,
+      this.scopeUserId,
     );
     return rows.map(mapPerson);
   }
@@ -117,8 +131,11 @@ export class SqlitePersonRepository implements Omit<PersonRepository, 'deletePer
 
   async listAnniversaries(personId: string): Promise<Anniversary[]> {
     const rows = await this.db.getAllAsync<AnniversaryRow>(
-      'SELECT * FROM anniversaries WHERE person_id = ? AND deleted = 0 ORDER BY created_at ASC, id ASC',
+      `SELECT * FROM anniversaries
+       WHERE person_id = ? AND deleted = 0 AND user_id IS ?
+       ORDER BY created_at ASC, id ASC`,
       personId,
+      this.scopeUserId,
     );
     return rows.map(mapAnniversary);
   }
@@ -166,8 +183,9 @@ export class SqlitePersonRepository implements Omit<PersonRepository, 'deletePer
 
   private async getAnniversaryOrThrow(id: string): Promise<Anniversary> {
     const row = await this.db.getFirstAsync<AnniversaryRow>(
-      'SELECT * FROM anniversaries WHERE id = ? AND deleted = 0',
+      'SELECT * FROM anniversaries WHERE id = ? AND deleted = 0 AND user_id IS ?',
       id,
+      this.scopeUserId,
     );
     if (!row) {
       throw new Error(`纪念日不存在或已删除：${id}`);
@@ -196,8 +214,10 @@ export class SqlitePersonRepository implements Omit<PersonRepository, 'deletePer
 
   async listTraits(personId: string): Promise<Trait[]> {
     const rows = await this.db.getAllAsync<TraitRow>(
-      'SELECT * FROM traits WHERE person_id = ? AND deleted = 0 ORDER BY position ASC, created_at ASC',
+      `SELECT * FROM traits WHERE person_id = ? AND deleted = 0 AND user_id IS ?
+       ORDER BY position ASC, created_at ASC`,
       personId,
+      this.scopeUserId,
     );
     return rows.map(mapTrait);
   }
@@ -225,8 +245,9 @@ export class SqlitePersonRepository implements Omit<PersonRepository, 'deletePer
 
   private async getTraitOrThrow(id: string): Promise<Trait> {
     const row = await this.db.getFirstAsync<TraitRow>(
-      'SELECT * FROM traits WHERE id = ? AND deleted = 0',
+      'SELECT * FROM traits WHERE id = ? AND deleted = 0 AND user_id IS ?',
       id,
+      this.scopeUserId,
     );
     if (!row) {
       throw new Error(`特征不存在或已删除：${id}`);

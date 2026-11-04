@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Button, EmptyState, Screen } from '../../src/components';
 import { colors, fonts, fontSize } from '../../src/theme/tokens';
@@ -8,6 +8,7 @@ import type { Anniversary, Person, Trait } from '../../src/data/entities';
 import { PersonDetail } from '../../src/features/persons/PersonDetail';
 import { PersonForm } from '../../src/features/persons/PersonForm';
 import { DeletePersonSheet } from '../../src/features/persons/DeletePersonSheet';
+import { useCloudReadOnly, writeErrorMessage } from '../../src/features/account/useCloudReadOnly';
 // M5 调度器：删除人员后重算提醒（当前为空桩，失败不阻断）
 import { rescheduleReminders } from '../../src/features/reminders/scheduler';
 
@@ -32,6 +33,8 @@ export default function PersonDetailScreen() {
   const [formKey, setFormKey] = useState(0);
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // 登录态离线时七张云表只读：删除入口置灰（G-A6）
+  const readOnly = useCloudReadOnly();
 
   // 读取档案；失败进入错误态，重试按钮重新执行本函数
   const fetchPerson = useCallback(async (id: string) => {
@@ -109,8 +112,9 @@ export default function PersonDetailScreen() {
       await Promise.resolve(rescheduleReminders()).catch(() => {});
       setDeleteVisible(false);
       router.replace('/(tabs)/contacts');
-    } catch {
+    } catch (e) {
       setDeleting(false);
+      Alert.alert('删除失败', writeErrorMessage(e, '请检查网络后重试。'));
     }
   };
 
@@ -167,6 +171,7 @@ export default function PersonDetailScreen() {
             <Button
               title="删除此人"
               variant="ghost"
+              disabled={readOnly}
               style={{ borderColor: colors.honey }}
               onPress={() => setDeleteVisible(true)}
             />
