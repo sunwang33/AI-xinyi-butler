@@ -1,0 +1,15 @@
+{
+  "name": "xinyi-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "心意管家 AI 生成网关（T57）：由 Supabase Edge Functions 迁回上海备案主机的 Node 小服务",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "license": "UNLICENSED"
+}

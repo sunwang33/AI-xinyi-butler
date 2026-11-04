@@ -14,3 +14,10 @@ export function mockCreateContentApi(): {
     fetchGifts: jest.fn(),
   };
 }
+
+/** ./snapshotBroadcast 的 mock 工厂：publishSnapshot 为 jest.fn，供断言同页广播 */
+export function mockCreateSnapshotBroadcast(): {
+  publishSnapshot: (...args: unknown[]) => unknown;
+} {
+  return { publishSnapshot: jest.fn() };
+}

@@ -1,0 +1,34 @@
+/*
+ * PM2 进程配置样例（T57）。
+ * 部署时复制为 server/ecosystem.config.cjs 并填入真实密钥：
+ *   cp deploy/ecosystem.config.cjs.example ecosystem.config.cjs
+ * 实际文件含 DEEPSEEK_API_KEY，已被 .gitignore 忽略，禁止提交。
+ *
+ * 启动 / 守护 / 开机自启：
+ *   pm2 start ecosystem.config.cjs
+ *   pm2 save
+ *   pm2 startup        # 按输出命令再执行一次
+ */
+module.exports = {
+  apps: [
+    {
+      name: 'xinyi-gateway',
+      script: 'src/index.js',
+      // 限频在进程内存里，必须单实例；不要开 cluster / instances>1
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      max_memory_restart: '200M',
+      env: {
+        NODE_ENV: 'production',
+        PORT: '3000',
+        DEEPSEEK_API_KEY: '在此填入真实密钥',
+        SUPABASE_URL: 'https://wohcvgarvrizbbcepggg.supabase.co',
+        SUPABASE_ANON_KEY: '在此填入 anon key（与 App 同一把）',
+        ANON_RATE_PER_MIN: '24',
+        USER_RATE_PER_MIN: '30',
+        UPSTREAM_TIMEOUT_MS: '25000',
+      },
+    },
+  ],
+};

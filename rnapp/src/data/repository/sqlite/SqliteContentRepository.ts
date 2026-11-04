@@ -325,10 +325,10 @@ export class SqliteContentRepository implements ContentRepository {
           input.year,
           input.kind,
           toJson(input.payload),
-          this.scopeUserId,
-          ts,
-          ts,
-          ts,
+          ts, // marked_at
+          this.scopeUserId, // user_id
+          ts, // created_at
+          ts, // updated_at
         );
       }
     });

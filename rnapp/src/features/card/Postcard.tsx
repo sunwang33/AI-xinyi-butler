@@ -34,7 +34,7 @@ export type CardArtHost = ComponentRef<typeof View>;
  * 第二次拍板：49 字以上不再继续缩，统一 16.5px——80 字硬上限最多约 6 行，
  * 祝福区纵向余量充足，不压称呼与右下落款。
  */
-function wishTypography(length: number): { size: number; lineHeight: number } {
+export function wishTypography(length: number): { size: number; lineHeight: number } {
   if (length <= 16) return { size: fontSize.title1, lineHeight: 44 };
   if (length <= 30) return { size: fontSize.title2, lineHeight: 37 };
   if (length <= 48) return { size: fontSize.title3, lineHeight: 31 };

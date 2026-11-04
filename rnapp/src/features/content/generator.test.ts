@@ -17,9 +17,14 @@ declare const jest: any;
 
 // 工厂在 import 初始化前执行，故在工厂内懒 require 辅助模块（同 scheduler.test 约定）
 jest.mock('./api', () => require('./contentTestMocks').mockCreateContentApi());
+// 广播只验证是否随落库触发，不接真实事件总线；工厂走辅助模块以满足 jest-hoist 限制
+jest.mock('./snapshotBroadcast', () =>
+  require('./contentTestMocks').mockCreateSnapshotBroadcast(),
+);
 
 const mockedFetchBlessings = fetchBlessings as any;
 const mockedFetchGifts = fetchGifts as any;
+const mockedPublish = require('./snapshotBroadcast').publishSnapshot as any;
 
 const key: OccasionKey = {
   occasionType: 'birthday',
@@ -166,5 +171,36 @@ describe('generateContent · 礼物', () => {
         ),
       ).toBe(true);
     }
+  });
+});
+
+describe('generateContent · 广播与落库失败', () => {
+  it('成功落库后按业务键广播快照（T45 贺卡同页刷新依赖）', async () => {
+    mockedFetchBlessings.mockResolvedValue(['甲', '乙']);
+    const repo = makeRepo();
+    const result = await generateContent(repo, 'blessing', key, context, { count: 2 });
+    expect(mockedPublish).toHaveBeenCalledTimes(1);
+    expect(mockedPublish).toHaveBeenCalledWith(key, result.snapshot);
+  });
+
+  it('失败状态行本身也写不进去（如登录态离线只读）：仍抛原始生成错误', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockedFetchBlessings.mockRejectedValue(networkError());
+    const repo = {
+      getSnapshot: jest.fn(async () => null),
+      upsertSnapshot: jest.fn(async () => {
+        throw new Error('只读模式下不可写入');
+      }),
+    } as unknown as DataRepository & { upsertSnapshot: any };
+
+    await expect(
+      generateContent(repo, 'blessing', key, context, { count: 3 }),
+    ).rejects.toMatchObject({ reason: 'network' });
+    // 尝试写过 failed 行，但没有用落库错误替换原始网络错误
+    expect(repo.upsertSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed', failCount: 1 }),
+    );
+    expect(mockedPublish).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

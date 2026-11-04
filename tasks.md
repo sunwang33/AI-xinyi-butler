@@ -761,6 +761,14 @@
 - **涉及文件 / 页面**：新增 `server/`（主机网关源码，独立于 rnapp）、`supabase/functions/generate-content/`（迁移源）、App 内生成请求的 base URL 配置、`app/service-notice.tsx`；主机 Nginx/PM2 部署步骤记入 docs。
 - **完成后用户能看到什么**：国内真机不挂代理也能稳定生成祝福/礼物；登录与未登录状态都能正常生成；服务说明可看到账号与云端数据用途。
 - **前置**：T55、G-NET 反代部署；**可并行**：与 T56 并行（主机部署由开发者配合，AI 只产出配置与部署说明，不掌握主机凭证）。
+- **完成记录（2026-11-04，代码完成，待主机部署＋真机联调收口）**：
+  ① 网关代码全部落地新目录 `server/`（独立于 rnapp，**零第三方依赖**，Node 18+ 原生 ESM，`node --test` 自测 **16/16 通过**）：`src/config.js`（环境变量＋启动断言）、`src/types.js`（入参契约从 Edge types.ts 逐字移植）、`src/prompt.js`（中文提示词、模型参数 model `deepseek-chat`/temperature 0.8/礼物 max_tokens 1800、结果解析逐字迁移）、`src/upstream.js`（DeepSeek 调用 25s 超时）、`src/auth.js`（双通道：Bearer JWT 经 `/auth/v1/user` 校验＋60s 正缓存按 user.id 限频 30/min；`x-api-key` 匿名为来源 IP 限频 24/min）、`src/rateLimit.js`（内存滑动窗口，**PM2 必须单实例 fork**）、`src/index.js`（仅 `GET /health`、`POST /api/generate`，CORS/16KB body 上限/404·405/中文错误体/审计日志不含姓名特征，监听 127.0.0.1）。
+  ② 部署产物：`deploy/nginx-api.conf.example`（80→443；`/api/generate`、`/health` 转本机 3000；`/auth/v1/`、`/rest/v1/` 前缀与 `/functions/v1/generate-content` 精确反代 Supabase，Host 改写＋`proxy_ssl_server_name on`＋XFF 覆盖式下发；其余一律 404，不做开放代理）、`deploy/ecosystem.config.cjs.example`（fork 单实例）、`README.md`（主机部署 6 步＋4 条 curl 验收）；密钥只进服务器 `.env`/`ecosystem.config.cjs`（均已 gitignore），不入库。
+  ③ App 端：新增 `src/lib/gateway.ts` 单布尔开关 `USE_SHANGHAI_GATEWAY`（**默认 false**，主机联调通过才置 true）；`src/features/content/api.ts` 重写为 Edge/上海双通道，登录态自动带 JWT、匿名带 anon key，响应与 network/ratelimit/service 错误契约两通道一致；typecheck/lint 全净、**jest 157/157 绿**。
+  ④ `app/service-notice.tsx` 新增「账号登录与云端同步」一节（登录可选/七类上云数据/三类仅本机数据/境外存储指向隐私政策/离线只读/退出清留可选），原"账号功能上线时补充"占位删除；AI 中转措辞改为"经我们自己的服务端转发"（两通道均成立）。**该节合规文案为 AI 起草，待开发者审阅拍板。**
+  ⑤ **旧 Edge 函数处置（实施时记录）**：暂保留为备用回退通道（Nginx 精确反代了它），待网关生产稳定一个版本、T58 全量验收后再停用，届时删 Nginx functions 段、删 App edge 分支、Dashboard 删函数。
+  ⑥ 同日晚补 `server/test/auth.test.js`（7 例：Bearer 通过/大小写空白容忍/上游 401 与网络异常/失败不缓存/60 秒正缓存命中/匿名 key 对错/匿名按 IP 建键），服务端自测共 **16/16**。HTTP 层端到端集成测试（起真实端口打 /health、401、400、429、200）需把 index.js 的 server 实例导出以便关闭，留作部署前小重构，不在今晚范围。
+  **待办（需开发者在场）**：按 `server/README.md` 主机部署（DNS→PM2→Nginx/证书→curl 四验收）→真机匿名/登录两通道各生成祝福与礼物→翻开关 true→反代稳定后再切 `supabase.ts` 数据通道 base URL→随 T58 一起真机收口。
 
 ### T58　账号链路真机验收
 
@@ -796,6 +804,7 @@
 - **涉及文件 / 页面**：`app/privacy.tsx`、`app/(tabs)/settings.tsx`、`app/service-notice.tsx`（互相引用）、根布局、隐私确认持久化 `src/lib/privacyConsent.ts`（与既有 AI 同意 `aiConsent` 分开，不混用）。
 - **完成后用户能看到什么**：首次安装先看到隐私政策要点并确认；之后随时可在设置查看完整《隐私政策》。
 - **前置**：无（上架前必须；云相关段落可在 M12 后补全措辞）。
+- **进展（2026-11-04 晚）**：正文初稿已起草于 `docs/legal/privacy-policy-draft.md`（含首启五条要点、数据出境专段、第三方服务清单、6 项待拍板清单）。**AI 只起草，等开发者审阅拍板后再落 `app/privacy.tsx`、设置入口与根布局首启确认**；当晚未动任何 UI 代码。
 
 ---
 
@@ -836,6 +845,13 @@
 - **涉及文件 / 页面**：`rnapp/src/data/repository/sqlite/*.test.ts`、`src/features/content/*.test.ts`、`src/features/card/*.test.ts`（只新增测试，不改源码；用例暴露缺陷时单列、由主线程判定修复归属，沿用 T73 纪律）。
 - **完成后用户能看到什么**：对用户无直接可见变化；`npm test` 在现有用例上增加且全绿，核心逻辑有自动化保障。
 - **前置**：T48–T53 完成（收藏/已送出仓储定型）；可与 T59–T61 并行。
+- **完成记录（2026-11-04 晚自主推进，代码完成；typecheck/lint 全净，jest 175/175 绿，原 157 例零回归）**：
+  ① **测试基建**：新增 `src/data/repository/sqlite/sqliteTestDb.ts`——用 Node 内置 `node:sqlite`（零新增依赖）内存库实现 expo-sqlite 异步接口子集，执行**真实迁移 DDL**（含 CHECK/唯一索引/外键级联），比手工 mock SQL 更能抓到真实缺陷；expo-crypto UUID 在测试中替换为确定性自增。
+  ② `SqliteContentRepository.test.ts`（10 例）：快照当年固定与祝福/礼物字段互不覆盖、跨年两行、通用节日无人键、updateSnapshot 按 id 改且不存在抛错；card_states 模板/selectedIndex/editedText 三者部分更新互不覆盖且 `null` 显式清空手写；收藏 payload JSON 往返/kind 过滤/允许重复/取消不碰原快照；已送出同人同日子同年同 kind 重复标记只更新不新增、撤销、按年倒序、流水 JOIN 人员姓名；**匿名行与账号行（scopeUserId）作用域隔离**。
+  ③ `SqliteRepository.test.ts`（2 例）：deletePerson 事务级联清空 9 张关联表（含 person_reminder_settings 与通知日志），仅取消 scheduled 通知（delivered 只删行），无待送达时不调取消器。
+  ④ `generator.test.ts` 增补 2 例：成功落库后按业务键发布 snapshotBroadcast（T45 贺卡同页刷新依赖）；失败状态行本身也写不进时（登录态离线只读）保留原始生成错误、不广播；`contentTestMocks.ts` 增加广播 mock 工厂。
+  ⑤ `postcardTypography.test.ts`（4 例）：wishTypography 四档边界 16/30/48（49 字以上统一最小档）；**对源码的唯一改动是把 wishTypography 加 `export`，无行为变化**。
+  ⑥ **用例暴露并修复的生产缺陷（按 T73 纪律单列）**：`SqliteContentRepository.markSent` 的 INSERT 参数错位——T56 加 user_id 列时 `scopeUserId` 误插到 `marked_at` 位置：匿名仓储（scopeUserId=null）必触发 marked_at NOT NULL 失败，**未登录用户的「已送出」标记在 T56 提交后整体不可用**；带账号 id 调用则会把 id 写进 marked_at、时间戳写进 user_id（登录在线写实际走云端＋通用 `upsertCacheRows`，不经此 SQL，故未在线上路径发作）。M11 真机时代码正确，此为 T56 重构引入、尚未真机验收的回归；修复为参数归位一行（SqliteContentRepository.ts markSent INSERT）。**T58/T60 真机须重点回归未登录路径的「已送出」标记/撤销/流水**。其余五张表的 INSERT 参数已逐一核对，无同类错位。
 
 ---
 

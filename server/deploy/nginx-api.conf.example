@@ -1,0 +1,91 @@
+# 心意管家 · 备案子域 Nginx 站点配置（T57 / G-NET）
+#
+# 部署位置：上海腾讯云主机 124.223.173.79（OpenCloudOS + 宝塔）
+# 域名：api.talentspec.top —— 腾讯云 DNS 加 A 记录指向 124.223.173.79
+# 证书：宝塔「SSL → Let's Encrypt」一键申请（或 certbot），证书路径以实际为准
+#
+# 本文件一个 server 块同时承载两类反代（App 只换 supabaseUrl + 生成网关地址）：
+#   1. AI 生成网关 /api/generate → 本机 Node 服务 127.0.0.1:3000
+#   2. Supabase /auth/v1/、/rest/v1/（含旧 Edge /functions 回退）→ 首尔项目
+# 其他路径一律 404，绝不做成开放代理。
+
+# ---- 全局建议（放 http {} 内，非本站点独有；如已有可跳过）----
+# resolver 用于 proxy_pass 到变量域名；固定写死上游时不需要。
+
+# HTTP 跳 HTTPS
+server {
+    listen 80;
+    server_name api.talentspec.top;
+    # 仅 ACME 校验可走 HTTP，其余跳转
+    location /.well-known/acme-challenge/ { root /www/wwwroot/acme; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name api.talentspec.top;
+
+    # 证书路径按宝塔实际生成路径替换
+    ssl_certificate     /www/server/panel/vhost/cert/api.talentspec.top/fullchain.pem;
+    ssl_certificate_key /www/server/panel/vhost/cert/api.talentspec.top/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # 入参都是短文本，16KB 服务端还会再拦一道，这里给到 1m 足够
+    client_max_body_size 1m;
+
+    # ---------- ① AI 生成网关 ----------
+    location = /health {
+        proxy_pass http://127.0.0.1:3000/health;
+        proxy_set_header Host $host;
+    }
+
+    location = /api/generate {
+        proxy_pass http://127.0.0.1:3000/api/generate;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        # 关键：覆盖而非追加，服务端取 XFF 链首做匿名限频，防止客户端伪造
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # DeepSeek 上游最坏 ~25s，给 60s 余量
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+
+    # ---------- ② Supabase 反代（认证 + 数据 REST；限路径白名单）----------
+    # 回源必须宣告正确的 Host/SNI，Supabase 边缘按域名路由
+    location ^~ /auth/v1/ {
+        proxy_pass https://wohcvgarvrizbbcepggg.supabase.co;
+        proxy_ssl_server_name on;
+        proxy_set_header Host wohcvgarvrizbbcepggg.supabase.co;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    location ^~ /rest/v1/ {
+        proxy_pass https://wohcvgarvrizbbcepggg.supabase.co;
+        proxy_ssl_server_name on;
+        proxy_set_header Host wohcvgarvrizbbcepggg.supabase.co;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    # 旧 Edge Function 反代仅为 App 端「edge 回退通道」保留；网关稳定后可删此段并停用函数。
+    # supabase-js invoke 走精确路径，故用精确匹配——其他函数名一律落不到这里。
+    location = /functions/v1/generate-content {
+        proxy_pass https://wohcvgarvrizbbcepggg.supabase.co;
+        proxy_ssl_server_name on;
+        proxy_set_header Host wohcvgarvrizbbcepggg.supabase.co;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    # ---------- 其余一切拒绝：本子域无网页、无其他服务 ----------
+    location / {
+        return 404;
+    }
+}

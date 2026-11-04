@@ -1,8 +1,7 @@
 /**
- * 服务说明（plan 3.1 /service-notice，M6 T29）。
- * 设置页常驻入口；说明 AI 信息发送范围、快照规则与离线可用范围。
+ * 服务说明（plan 3.1 /service-notice，M6 T29；M12 T57 补账号与云端同步）。
+ * 设置页常驻入口；说明 AI 信息发送范围、快照规则、离线可用范围与账号数据用途。
  * T28 B 组门禁（2026-10-31 拍板）：本页提供「撤回 AI 生成同意」入口。
- * 账号信息与云端数据用途在阶段 10（M12）补充。
  */
 import { useState, type ReactNode } from 'react';
 import { Text, View } from 'react-native';
@@ -57,7 +56,7 @@ export default function ServiceNoticeScreen() {
           </Paragraph>
           <Paragraph>
             姓名、出生年份等与生成无关的信息不会发送。AI 服务由 DeepSeek
-            提供，请求经我们的 Supabase 云函数中转：API 密钥只保存在服务端，云函数不保存你发送的信息，服务日志也不记录姓名与特征。
+            提供，请求经我们自己的服务端转发：API 密钥只保存在服务端，服务端不保存你发送的信息，服务日志也不记录姓名与特征。
           </Paragraph>
         </NoticeSection>
 
@@ -74,6 +73,22 @@ export default function ServiceNoticeScreen() {
           <Paragraph>
             已经生成的祝福与礼物在无网络时仍可完整查看；尚未生成的内容需要联网。祝福连续 3
             次生成失败时，会先显示一组不针对个人的通用祝福，网络恢复后可重新生成覆盖。
+          </Paragraph>
+        </NoticeSection>
+
+        <NoticeSection title="账号登录与云端同步">
+          <Paragraph>
+            账号登录是可选的：不登录时，全部功能都可以在本机正常使用，数据只保存在这台手机上。
+          </Paragraph>
+          <Paragraph>
+            登录账号后，以下数据会自动同步到云端：人员资料、纪念日、人物特征、已生成的祝福与礼物、贺卡状态、收藏与已送出记录。更换手机或卸载重装后，登录同一账号即可恢复这些数据。
+          </Paragraph>
+          <Paragraph>
+            提醒设置、节日关注设置与本机通知记录只保存在手机上，不会上传云端。云端数据库由
+            Supabase 提供，数据存储在境外服务器，详情以隐私政策为准。
+          </Paragraph>
+          <Paragraph>
+            登录状态下没有网络时，数据暂时只能查看、不能增改，恢复网络后会自动续上同步。退出登录时，你可以选择把本机数据一并清除，或保留在这台手机上。
           </Paragraph>
         </NoticeSection>
 
@@ -95,10 +110,6 @@ export default function ServiceNoticeScreen() {
             </View>
           ) : null}
         </NoticeSection>
-
-        <Text style={{ fontFamily: fonts.sans, fontSize: fontSize.small, lineHeight: 20, color: colors.inkFaint }}>
-          账号登录与云端数据用途说明，将在账号功能上线时补充到本页。
-        </Text>
       </View>
 
       <Sheet visible={confirmVisible} title="撤回 AI 生成同意？" onClose={() => setConfirmVisible(false)}>
