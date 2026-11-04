@@ -182,7 +182,7 @@ CREATE TABLE sent_records (
   updated_at      TEXT NOT NULL,
   deleted         INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1))
 );
--- 初步唯一（5.1 节，随门禁 A4 定稿）；year DESC 同时服务往年记录按年份倒序读取
+-- 业务唯一：人 × 日子 × 年 × kind（A4 2026-11-04 定稿分条标记）；year DESC 同时服务往年记录按年份倒序读取
 CREATE UNIQUE INDEX ux_sent_record ON sent_records (
   person_id,
   occasion_type,

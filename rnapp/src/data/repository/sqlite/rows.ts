@@ -23,6 +23,7 @@ import {
   type PersonReminderSettings,
   type Relation,
   type SentRecord,
+  type SentTimelineRow,
   type SnapshotStatus,
   type Trait,
   AI_CONSENTS,
@@ -298,6 +299,28 @@ export function mapSentRecord(row: SentRecordRow): SentRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deleted: row.deleted === 1,
+  };
+}
+
+/**
+ * 全局流水查询行（T69）：sent_records 全列（sr.*）＋ JOIN 出的人员 / 纪念日展示列。
+ * 列名全部带别名，不与 sr.* 的列冲突。
+ */
+export interface SentTimelineDbRow extends SentRecordRow {
+  person_name: string;
+  person_salutation: string | null;
+  person_relation: string;
+  anniversary_name: string | null;
+}
+
+/** 流水扁平行映射：记录体复用 mapSentRecord，再附展示字段（relation 收窄为枚举） */
+export function mapSentTimelineRow(row: SentTimelineDbRow): SentTimelineRow {
+  return {
+    record: mapSentRecord(row),
+    personName: row.person_name,
+    personSalutation: row.person_salutation,
+    relation: narrow(RELATIONS, row.person_relation, 'relation') as Relation,
+    anniversaryName: row.anniversary_name,
   };
 }
 

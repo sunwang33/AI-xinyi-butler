@@ -29,6 +29,7 @@ import type {
   SentRecord,
   SentRecordCreate,
   SentRecordQuery,
+  SentTimelineRow,
   SnapshotPatch,
   SnapshotUpsert,
   Trait,
@@ -109,6 +110,11 @@ export interface ContentRepository {
   getSentRecord(id: string): Promise<SentRecord | null>;
   /** 同一人同一日子的全部记录，按年份与标记时间倒序 */
   listSentRecords(query: SentRecordQuery): Promise<SentRecord[]>;
+  /**
+   * 全局流水（T69 F17）：全部已送出记录（INNER JOIN persons，人删则行级联消失），
+   * 附人员 / 纪念日展示字段，按标记时间倒序；UI 再按「人 × 日子 × 年」聚合。
+   */
+  listSentTimeline(): Promise<SentTimelineRow[]>;
 
   // 通知日志：登记、去重查询、状态流转
   insertNotificationLog(input: NotificationLogCreate): Promise<NotificationLog>;

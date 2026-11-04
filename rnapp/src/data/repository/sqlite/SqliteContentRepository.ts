@@ -14,6 +14,7 @@ import type {
   SentRecord,
   SentRecordCreate,
   SentRecordQuery,
+  SentTimelineRow,
   SnapshotPatch,
   SnapshotUpsert,
 } from '../../entities';
@@ -24,11 +25,13 @@ import {
   mapFavorite,
   mapNotificationLog,
   mapSentRecord,
+  mapSentTimelineRow,
   mapSnapshot,
   type CardStateRow,
   type FavoriteRow,
   type NotificationLogRow,
   type SentRecordRow,
+  type SentTimelineDbRow,
   type SnapshotRow,
 } from './rows';
 
@@ -337,6 +340,25 @@ export class SqliteContentRepository implements ContentRepository {
       ...(query.kind ? [query.kind] : []),
     );
     return rows.map(mapSentRecord);
+  }
+
+  async listSentTimeline(): Promise<SentTimelineRow[]> {
+    // INNER JOIN persons：人被物理删除时其 sent_records 已随外键级联消失，
+    // 能查出来的行必然能 join 到；LEFT JOIN anniversaries（仅 anniversary 行有值）。
+    // 别名列不与 sr.* 冲突；排序先 marked_at 再 id，同刻标记顺序也稳定。
+    const rows = await this.db.getAllAsync<SentTimelineDbRow>(
+      `SELECT sr.*,
+              p.name AS person_name,
+              p.salutation AS person_salutation,
+              p.relation AS person_relation,
+              a.name AS anniversary_name
+         FROM sent_records sr
+              INNER JOIN persons p ON p.id = sr.person_id
+              LEFT JOIN anniversaries a ON a.id = sr.anniversary_id
+        WHERE sr.deleted = 0
+        ORDER BY sr.marked_at DESC, sr.id DESC`,
+    );
+    return rows.map(mapSentTimelineRow);
   }
 
   // ---------- 通知日志 ----------

@@ -28,6 +28,8 @@ import { getRepository } from '../../data/repository';
 import { FavoriteToggle } from '../favorites/FavoriteToggle';
 import type { FavoriteScope } from '../favorites/restore';
 import type { FavoriteStateApi } from '../favorites/useFavorites';
+import { SentToggle } from '../history/SentToggle';
+import type { SentStateApi } from '../history/useSentRecords';
 import { useBroadcastSnapshot } from '../content/snapshotBroadcast';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import { captureCardArt, saveCardToLibrary, shareCardImage } from './export';
@@ -50,6 +52,7 @@ export function CardSection({
   dateFull,
   favoriteApi,
   favoriteScope,
+  sentApi,
 }: {
   occasionKey: OccasionKey;
   /** 通用版节日为 null */
@@ -60,6 +63,8 @@ export function CardSection({
   favoriteApi: FavoriteStateApi;
   /** M10：本贺卡所属的日子作用域 */
   favoriteScope: FavoriteScope;
+  /** M11 T50：今年已送出标记（通用版不渲染，T51 引导先选人） */
+  sentApi: SentStateApi;
 }) {
   const [card, setCard] = useState<CardState | null>(null);
   // 当年祝福快照首屏值（挂载时从仓储读，离线可看）
@@ -310,9 +315,28 @@ export function CardSection({
               artRef={artRef}
             />
 
-            {/* M10：收藏当前这版（同模板＋称呼＋文案＋自称再点取消；改字 / 换模板后成新版本） */}
+            {/* 收藏＋送出：右对齐一组。M10 收藏＝多版本并存；M11 送出＝同年同类唯一，
+                换版再标记走「用这条更改」确认（见 decideSentAction）。通用版不渲染送出按钮 */}
             {cardPayload ? (
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 11 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  gap: spacing.md,
+                  marginTop: 11,
+                }}
+              >
+                {person !== null ? (
+                  <SentToggle
+                    api={sentApi}
+                    year={favoriteScope.key.year}
+                    kind="card"
+                    payload={cardPayload}
+                    idleLabel="标记这版已送出"
+                    activeLabel="已送出这版"
+                  />
+                ) : null}
                 <FavoriteToggle
                   api={favoriteApi}
                   scope={favoriteScope}

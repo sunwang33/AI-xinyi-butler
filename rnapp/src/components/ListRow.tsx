@@ -23,6 +23,7 @@ export function ListRow({
   title,
   subtitle,
   avatar,
+  left,
   avatarTone = 'default',
   showChevron = false,
   right,
@@ -33,6 +34,8 @@ export function ListRow({
   title: ReactNode;
   subtitle?: string;
   avatar?: string;
+  /** 自定义左节点（如历史流水的邮戳）；提供时优先于 avatar */
+  left?: ReactNode;
   avatarTone?: AvatarTone;
   showChevron?: boolean;
   right?: ReactNode;
@@ -58,7 +61,9 @@ export function ListRow({
         style,
       ]}
     >
-      {avatar ? (
+      {left ? (
+        left
+      ) : avatar ? (
         <View
           style={{
             width: 42,

@@ -10,6 +10,8 @@ import type { AiConsent, GiftSuggestion, OccasionKey } from '../../data/entities
 import { FavoriteToggle } from '../favorites/FavoriteToggle';
 import type { FavoriteScope } from '../favorites/restore';
 import type { FavoriteStateApi } from '../favorites/useFavorites';
+import { SentToggle } from '../history/SentToggle';
+import type { SentStateApi } from '../history/useSentRecords';
 import { GIFT_PLATFORMS, openGiftSearch } from '../gift/link';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import type { ContentContext } from './types';
@@ -24,6 +26,7 @@ export function GiftSection({
   ensureConsent,
   favoriteApi,
   favoriteScope,
+  sentApi,
 }: {
   occasionKey: OccasionKey;
   context: ContentContext;
@@ -34,6 +37,8 @@ export function GiftSection({
   favoriteApi: FavoriteStateApi;
   /** M10：本礼物所属的日子作用域 */
   favoriteScope: FavoriteScope;
+  /** M11 T50：今年实际送出的礼物标记（同年只保留一个，换标记走更改确认） */
+  sentApi: SentStateApi;
 }) {
   const state = useGeneratedContent('gift', occasionKey, context, consent, {
     // 礼物固定向模型要 6 条（云函数忽略 count），count 仅为 hook 入参完整性
@@ -84,13 +89,23 @@ export function GiftSection({
                     marginTop: spacing.sm,
                   }}
                 >
-                  {/* M10：每个礼物建议可单独收藏（按名称＋理由＋搜索词去重） */}
-                  <FavoriteToggle
-                    api={favoriteApi}
-                    scope={favoriteScope}
-                    kind="gift"
-                    payload={gift}
-                  />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    {/* M11 T50：把实际送出的那个礼物标记送出；同年同类业务唯一，
+                        标第二个会弹「用当前这条更改」确认（见 SentToggle） */}
+                    <SentToggle
+                      api={sentApi}
+                      year={favoriteScope.key.year}
+                      kind="gift"
+                      payload={gift}
+                    />
+                    {/* M10：每个礼物建议可单独收藏（按名称＋理由＋搜索词去重） */}
+                    <FavoriteToggle
+                      api={favoriteApi}
+                      scope={favoriteScope}
+                      kind="gift"
+                      payload={gift}
+                    />
+                  </View>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`去看看：${gift.name}`}

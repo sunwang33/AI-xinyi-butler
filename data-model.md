@@ -226,9 +226,9 @@ spec 第 14 条明确登录后上云的数据为：人员档案、纪念日、�
 
 ### 2.10 `sent_records`（「今年已送出」/ 往年记录）
 
-按 plan 4.2 的初步字段设计为**按祝福/礼物/贺卡条目分别标记**（允许只送一样）；该结构及是否允许提前/事后补标属 **A4**，阶段 9 开工前拍板后定稿。
+**按祝福/礼物/贺卡条目分别标记**（允许只送一样）。**A4 已于 2026-11-04 拍板定稿**：分条标记结构不变；提前、当天、事后补标均允许（`year` 自动取日子归属年份）；业务键（人 × 日子 × 年 × kind）即唯一约束，同年同种类再标记＝upsert「更改」（更新 payload 与 marked_at）。F17 流水存储按 kind 分行、UI 按「人 × 日子 × 年」聚合一行。
 
-本表同时是 **F17 历史 Tab「已送出」全局流水**的数据源：跨人跨年按 `marked_at` 倒序聚合；取关节日不影响已有行；人物删除时相关行级联消失。
+本表同时是 **F17 历史 Tab「已送出」全局流水**的数据源：跨人跨年按 `marked_at` 倒序聚合；取关节日不影响已有行；人物删除时相关行级联消失。仓储 `listSentTimeline()` 以 `sent_records sr INNER JOIN persons p LEFT JOIN anniversaries a` 取出扁平行（附人员姓名/称呼/关系与纪念日名；人被物理删除时其行已随外键级联消失，INNER JOIN 不丢数据），feature 层 `timeline.groupSentTimeline` 再按「人 × 日子 × 年」聚合成 UI 一行，组与组按组内最新 `marked_at` 倒序。
 
 | 字段名 | 类型 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -310,7 +310,7 @@ spec 第 14 条明确登录后上云的数据为：人员档案、纪念日、�
   { "name": "礼物名称或方向", "reason": "为什么适合 TA", "search_term": "电商搜索词" }
   ```
 
-- `kind = "card"`：保存贺卡的模板与图文（**A3 已拍板（2026-11-01）：画布横版 2560×1568，比例 80:49**；导出参数不入库）：
+- `kind = "card"`：保存贺卡的模板与图文（**D8+A3 重开后 2026-11-02 拍板：竖版 1860×2480（3:4）写实摄影**，横版水彩废弃；导出参数不入库）：
 
   ```json
   {
@@ -379,7 +379,7 @@ erDiagram
 | `content_snapshots` | 「人 × 日子 × 年份」唯一，见 7.2 表达式唯一索引 |
 | `card_states` | 同上 |
 | `notification_log` | 「日子 × 年份」唯一，见 7.2 |
-| `sent_records` | 初步唯一：(`person_id`, `occasion_type`, COALESCE(`anniversary_id`), COALESCE(`festival_code`), `year`, `kind`)；随 **A4** 定稿 |
+| `sent_records` | 唯一：(`person_id`, `occasion_type`, COALESCE(`anniversary_id`), COALESCE(`festival_code`), `year`, `kind`)——**A4 2026-11-04 定稿**（本机即表达式唯一索引 `ux_sent_record`；upsert 走事务内 SELECT 再 UPDATE/INSERT） |
 
 ### 5.2 查询索引
 

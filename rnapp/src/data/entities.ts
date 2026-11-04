@@ -316,6 +316,21 @@ export type SentRecordQuery = Pick<
   kind?: ContentKind;
 };
 
+/**
+ * 已送出全局流水扁平行（T69 F17）：一条 sent_records 记录 ＋ JOIN 出的
+ * 人员 / 纪念日展示字段。人被物理删除时其记录随外键级联消失，故流水行内
+ * personName 等必然取得到；节日名由 UI 层按 festivalCode 查 FESTIVALS 常量表。
+ */
+export interface SentTimelineRow {
+  record: SentRecord;
+  personName: string;
+  /** 你怎么称呼 TA，未填为 null（标题回退 personName） */
+  personSalutation: string | null;
+  relation: Relation;
+  /** anniversary 行的日子名；生日 / 节日行为 null */
+  anniversaryName: string | null;
+}
+
 /** 提醒调度与去重运行数据（纯本机，不上云，同一「日子 × 年份」唯一） */
 export interface NotificationLog {
   id: string;

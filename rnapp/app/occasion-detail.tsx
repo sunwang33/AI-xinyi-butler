@@ -5,7 +5,7 @@
  *       year（必填整数，设备本地年份）。
  * M6/M7：祝福分区（告知门禁、生成、当年快照、复制、重试、重新生成）、
  *        礼物分区（不少于五个、去看看跳电商搜索）；通用版节日只含祝福与贺卡。
- * 电子贺卡、往年记录仍为占位，由后续里程碑填充。
+ * M9 电子贺卡（自动组合、翻页手写、导出分享）；M11 行内「标记送出」＋底部往年心意面板。
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
@@ -30,6 +30,8 @@ import { buildContentContext } from '../src/features/content/context';
 import { ConsentSheet } from '../src/features/consent/ConsentSheet';
 import { useFavorites } from '../src/features/favorites/useFavorites';
 import { personLabelFor, type FavoriteScope } from '../src/features/favorites/restore';
+import { useSentRecords } from '../src/features/history/useSentRecords';
+import { SentMarksPanel } from '../src/features/history/SentMarksPanel';
 import { colors, fonts, fontSize, spacing } from '../src/theme/tokens';
 
 /** 校验通过后的日子定位参数 */
@@ -113,15 +115,6 @@ function SectionCard({ title, children }: { title: string; children: ReactNode }
   );
 }
 
-/** 分区内的灰色说明文案 */
-function SectionNote({ children }: { children: ReactNode }) {
-  return (
-    <Text style={{ fontFamily: fonts.sans, fontSize: fontSize.body, lineHeight: 22, color: colors.inkSoft }}>
-      {children}
-    </Text>
-  );
-}
-
 /** 标题区所需的档案资料与设置（本轮起含特征、祝福条数、AI 告知状态） */
 interface HeaderData {
   person: Person | null;
@@ -140,6 +133,23 @@ export default function OccasionDetailScreen() {
   // M10：收藏状态（全量，聚焦时刷新）。无条件挂在所有 early return 之前，
   // 供祝福 / 礼物 / 贺卡三区的书签按钮共用同一份状态。
   const favoriteApi = useFavorites();
+
+  // M11 T50：同一人同一日子全部年份的已送出记录（聚焦刷新）。scope 只依赖
+  // 已校验的 query（label / 日子名在底部面板用 favoriteScope，不影响本 hook 读取）。
+  const sentScope: FavoriteScope | null = params
+    ? {
+        key: {
+          occasionType: params.kind,
+          personId: params.personId,
+          anniversaryId: params.anniversaryId,
+          festivalCode: params.festivalCode,
+          year: params.year,
+        },
+        personLabel: '',
+        occasionName: '',
+      }
+    : null;
+  const sentApi = useSentRecords(sentScope);
 
   // 拆出原始查询字段：params 每次渲染为新对象，按原始字段作依赖，query 不变则不重复读取
   const queryKind = params?.kind ?? null;
@@ -367,6 +377,7 @@ export default function OccasionDetailScreen() {
           ensureConsent={ensureConsent}
           favoriteApi={favoriteApi}
           favoriteScope={favoriteScope}
+          sentApi={sentApi}
         />
 
         {/* 分区二：礼物建议（M7）。spec 第 7 条：通用版节日只含祝福与贺卡，不渲染礼物分区 */}
@@ -379,6 +390,7 @@ export default function OccasionDetailScreen() {
             ensureConsent={ensureConsent}
             favoriteApi={favoriteApi}
             favoriteScope={favoriteScope}
+            sentApi={sentApi}
           />
         ) : null}
 
@@ -392,12 +404,19 @@ export default function OccasionDetailScreen() {
           dateFull={cardDateFull}
           favoriteApi={favoriteApi}
           favoriteScope={favoriteScope}
+          sentApi={sentApi}
         />
 
-        {/* 底部区位：今年已送出 / 往年记录（M11 / T50、T52 填充标记与往年倒序列表）。
-            无往年记录时最终文案即「今年是第一次」（spec 第 12 条）。 */}
-        <SectionCard title="今年已送出 · 往年记录">
-          <SectionNote>今年是第一次</SectionNote>
+        {/* 底部区位：往年心意（M11）。
+            T50：具体人可标记今年送出的祝福 / 礼物 / 贺卡（行内按钮），面板显示三枚状态章；
+            T51：通用版节日在此引导先选人；T52 再接按年份倒序的往年记录列表。 */}
+        <SectionCard title="往年心意">
+          <SentMarksPanel
+            scope={favoriteScope}
+            api={sentApi}
+            person={header.person}
+            isGenericFestival={isGenericFestival}
+          />
         </SectionCard>
       </View>
 

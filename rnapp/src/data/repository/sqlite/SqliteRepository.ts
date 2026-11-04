@@ -25,6 +25,7 @@ import type {
   SentRecord,
   SentRecordCreate,
   SentRecordQuery,
+  SentTimelineRow,
   SnapshotPatch,
   SnapshotUpsert,
   Trait,
@@ -217,6 +218,10 @@ export class SqliteRepository implements DataRepository {
 
   listSentRecords(query: SentRecordQuery): Promise<SentRecord[]> {
     return this.content.listSentRecords(query);
+  }
+
+  listSentTimeline(): Promise<SentTimelineRow[]> {
+    return this.content.listSentTimeline();
   }
 
   insertNotificationLog(input: NotificationLogCreate): Promise<NotificationLog> {

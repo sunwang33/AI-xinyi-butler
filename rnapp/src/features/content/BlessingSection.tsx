@@ -11,6 +11,8 @@ import type { AiConsent, OccasionKey } from '../../data/entities';
 import { FavoriteToggle } from '../favorites/FavoriteToggle';
 import type { FavoriteScope } from '../favorites/restore';
 import type { FavoriteStateApi } from '../favorites/useFavorites';
+import { SentToggle } from '../history/SentToggle';
+import type { SentStateApi } from '../history/useSentRecords';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import type { ContentContext } from './types';
 import { useGeneratedContent } from './useGeneratedContent';
@@ -26,6 +28,7 @@ export function BlessingSection({
   ensureConsent,
   favoriteApi,
   favoriteScope,
+  sentApi,
 }: {
   occasionKey: OccasionKey;
   context: ContentContext;
@@ -40,6 +43,8 @@ export function BlessingSection({
   favoriteApi: FavoriteStateApi;
   /** M10：本条祝福所属的日子作用域（定位键 ＋ 对象 / 日子名快照） */
   favoriteScope: FavoriteScope;
+  /** M11 T50：今年已送出标记（通用版节日不渲染标记按钮，T51 引导先选人） */
+  sentApi: SentStateApi;
 }) {
   const router = useRouter();
   const state = useGeneratedContent('blessing', occasionKey, context, consent, {
@@ -117,13 +122,25 @@ export function BlessingSection({
                       {copiedIndex === index ? '已复制' : '复制'}
                     </Text>
                   </Pressable>
-                  {/* M10：每条祝福可单独收藏，同文案再点取消 */}
-                  <FavoriteToggle
-                    api={favoriteApi}
-                    scope={favoriteScope}
-                    kind="blessing"
-                    payload={{ text }}
-                  />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    {/* M11 T50：实际送出的那条标记已送出（同年同类唯一，再点确认撤销/更改）；
+                        通用版节日无归属人，T51 在底部面板引导先选人 */}
+                    {personId !== null ? (
+                      <SentToggle
+                        api={sentApi}
+                        year={favoriteScope.key.year}
+                        kind="blessing"
+                        payload={{ text }}
+                      />
+                    ) : null}
+                    {/* M10：每条祝福可单独收藏，同文案再点取消 */}
+                    <FavoriteToggle
+                      api={favoriteApi}
+                      scope={favoriteScope}
+                      kind="blessing"
+                      payload={{ text }}
+                    />
+                  </View>
                 </View>
               </View>
             ))}

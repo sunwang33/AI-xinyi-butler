@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { AppHeader, EmptyState, Screen } from '../../src/components';
+import { AppHeader, Screen } from '../../src/components';
 import { FavoriteList } from '../../src/features/favorites/FavoriteList';
+import { SentTimeline } from '../../src/features/history/SentTimeline';
 import { colors, fonts, fontSize, radius, spacing } from '../../src/theme/tokens';
 
 /** 历史 Tab 分区：已送出流水（T69/T70 填充）/ 收藏（T49 填充） */
@@ -17,7 +18,8 @@ const SECTIONS: { key: HistorySection; label: string }[] = [
  * 顶部原型 .seg 风格分段控件，纯本地 useState 切换、默认停在「已送出」。
  * - 收藏段（M10 T49）：FavoriteList 接 favorites，chips 筛类型、按收藏时间倒序、
  *   祝福复制 / 礼物去看看 / 贺卡导出 / 取消收藏，全部离线可见；
- * - 已送出段仍为空态（流水留 M11 的 T69/T70）。
+ * - 已送出段（M11 T69/T70）：SentTimeline 全局流水，按「人 × 日子 × 年」聚合、
+ *   标记时间倒序，点按在本页 Sheet 内只读回看（祝福复制 / 礼物去看看 / 贺卡只读预览）。
  */
 export default function HistoryScreen() {
   const [section, setSection] = useState<HistorySection>('sent');
@@ -78,10 +80,8 @@ export default function HistoryScreen() {
       </View>
 
       {section === 'sent' ? (
-        <EmptyState
-          title="还没有标记过已送出的心意"
-          description="标记过送出的祝福、礼物与贺卡会留在这里。"
-        />
+        // M11 T69/T70：已送出全局流水（自带加载 / 错误重试 / 空三态与回看弹层）
+        <SentTimeline />
       ) : (
         // M10 T49：收藏分区（自带加载 / 空 / 筛选空三态）
         <FavoriteList />
