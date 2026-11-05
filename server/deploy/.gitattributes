@@ -1,0 +1,3 @@
+# 部署脚本与模板必须保持 LF，否则在 Linux 主机执行会因 CRLF 报错
+*.sh text eol=lf
+*.template text eol=lf

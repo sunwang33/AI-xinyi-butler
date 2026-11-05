@@ -3,3 +3,7 @@
 ecosystem.config.cjs
 node_modules/
 *.log
+
+# 一键部署的真实变量（含 DeepSeek/anon key）与运行时文件，绝不入库
+deploy/deploy.env
+deploy/**/deploy.runtime.env

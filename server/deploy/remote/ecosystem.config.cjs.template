@@ -1,0 +1,32 @@
+/*
+ * PM2 进程配置模板（一键部署用，占位符如 @@APP_PORT@@ 由 setup-host.sh 渲染）。
+ * 渲染后落到 @@APP_DIR@@/ecosystem.config.cjs，权限 600，含 DEEPSEEK_API_KEY，绝不入库。
+ *
+ * 启动 / 守护 / 开机自启（setup-host.sh 已自动执行，手动等价命令）：
+ *   pm2 start ecosystem.config.cjs
+ *   pm2 save
+ *   pm2 startup        # 按输出命令再执行一次
+ */
+module.exports = {
+  apps: [
+    {
+      name: '@@APP_NAME@@',
+      script: 'src/index.js',
+      // 限频在进程内存里，必须单实例；不要开 cluster / instances>1
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      max_memory_restart: '200M',
+      env: {
+        NODE_ENV: 'production',
+        PORT: '@@APP_PORT@@',
+        DEEPSEEK_API_KEY: '@@DEEPSEEK_API_KEY@@',
+        SUPABASE_URL: '@@SUPABASE_UPSTREAM@@',
+        SUPABASE_ANON_KEY: '@@SUPABASE_ANON_KEY@@',
+        ANON_RATE_PER_MIN: '@@ANON_RATE_PER_MIN@@',
+        USER_RATE_PER_MIN: '@@USER_RATE_PER_MIN@@',
+        UPSTREAM_TIMEOUT_MS: '@@UPSTREAM_TIMEOUT_MS@@',
+      },
+    },
+  ],
+};

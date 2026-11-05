@@ -19,8 +19,15 @@ server/
 │   ├── prompt.js       # 提示词与结果解析（Edge prompt.ts 原样移植）
 │   └── upstream.js     # DeepSeek 调用（参数与 Edge 一致）
 ├── deploy/
-│   ├── nginx-api.conf.example      # 备案子域 Nginx 站点（AI 网关 + Supabase 限路径反代）
-│   └── ecosystem.config.cjs.example
+│   ├── deploy.sh                   # 【一键部署入口】本机执行，换机/升级跑这个
+│   ├── deploy.env.example          # 部署变量样板（真实 deploy.env 含密钥，gitignore 不入库）
+│   ├── MIGRATION.md                # 换机/新机部署 runbook（手动前置 + 故障排查 + 现网参数）
+│   ├── nginx-api.conf.example      # 手动部署用 Nginx 站点（原理/备用，一键流程用 remote/ 模板）
+│   ├── ecosystem.config.cjs.example
+│   └── remote/                     # 一键部署的主机侧物料
+│       ├── setup-host.sh           # 主机幂等初始化（装依赖/证书/渲染配置/PM2，可反复跑）
+│       ├── nginx-api.conf.template # Nginx 模板（@@占位@@，setup 渲染）
+│       └── ecosystem.config.cjs.template
 └── test/
     ├── gateway.test.js             # 入参校验 / 结果解析 / 限频窗口纯逻辑
     ├── auth.test.js                # JWT 双通道鉴权与 60s 正缓存（fetch 桩）
@@ -38,6 +45,8 @@ npm test          # 全部 node:test 自测（27 个用例，零网络请求）
 ---
 
 # 主机部署（由开发者操作，AI 不掌握主机凭证）
+
+> **推荐：一键脚本（换机 / 新机 / 升级）**——完整步骤见 [`deploy/MIGRATION.md`](deploy/MIGRATION.md)：填好 `deploy/deploy.env`（由 `deploy.env.example` 复制）后在开发机跑 `bash deploy/deploy.sh`，自动完成依赖安装、certbot 证书、Nginx 渲染（带备份回滚）、PM2 守护与健康检查，全程幂等可重跑。以下手动步骤保留作为原理说明与无脚本环境的备用。
 
 前置：主机 124.223.173.79（OpenCloudOS + 宝塔）、域名已 ICP 备案、Node 18+、PM2。
 
