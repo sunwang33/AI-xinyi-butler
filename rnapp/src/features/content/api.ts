@@ -11,6 +11,14 @@ import { ContentError, type ContentContext, type ContentErrorReason } from './ty
 
 const FUNCTION_NAME = 'generate-content';
 
+/**
+ * 上海网关客户端兜底超时（T58 真机联调抓出，2026-11-05）。
+ * 裸 fetch 在 RN/OkHttp 下 read 默认无超时，手机网络静默丢包时 Promise 永不 settle、
+ * 页面永久转圈只能杀进程。取值依据：网关上游 25s 超时必回（成功或 502），
+ * Nginx 兜底 60s，30s 让客户端在两者之间先醒，按 network 错误走「需要网络」重试路径。
+ */
+const RELAY_TIMEOUT_MS = 30_000;
+
 /** 与服务端入参契约（server/src/types.js、Edge types.ts）保持一致 */
 interface RequestBody {
   kind: 'blessing' | 'gift';
@@ -53,16 +61,24 @@ async function invokeRelay(body: RequestBody): Promise<unknown> {
     headers.Authorization = `Bearer ${token}`;
   }
 
+  // 客户端超时兜底：网络静默丢包时主动 abort，避免请求无限挂起、UI 永久 loading
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
+
   let resp: Response;
   try {
     resp = await fetch(SHANGHAI_GATEWAY_URL, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
-  } catch {
-    // 设备无网络 / DNS / TLS 失败：与 Edge 通道口径一致，页面显示「需要网络」
-    throw new ContentError('network', 'network request failed');
+  } catch (err) {
+    // 设备无网络 / DNS / TLS 失败 / 30s 超时 abort：与 Edge 通道口径一致，页面显示「需要网络」
+    const detail = err instanceof Error ? err.message : 'network request failed';
+    throw new ContentError('network', detail);
+  } finally {
+    clearTimeout(timer);
   }
 
   if (resp.ok) {
