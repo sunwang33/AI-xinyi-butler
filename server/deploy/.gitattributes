@@ -1,3 +1,6 @@
-# 部署脚本与模板必须保持 LF，否则在 Linux 主机执行会因 CRLF 报错
+# 部署脚本/模板/变量样板必须保持 LF，否则 Linux 主机执行或 source 时 CRLF 报错
+# （deploy.env 从 .example 复制后会被 bash source，值尾混入 \r 会污染域名与密钥）
 *.sh text eol=lf
 *.template text eol=lf
+*.env text eol=lf
+*.example text eol=lf
