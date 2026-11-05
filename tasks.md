@@ -783,6 +783,18 @@
 - **前置**：T56、T57。
 - **验收清单（2026-11-04 晚预制）**：`docs/qa/t58-cloud-account-checklist.md`，九组 40 条——注册改密、未登录回归（含 T77 修复的「已送出」标记重点组）、首登静默合并、在线写同步、离线只读、退出清/留、换号隔离、卸载重装、T57 网关联调。
 
+> **真机联调进度（2026-11-05，小米 vermeer / Expo Go 58.0.5 / adb reverse 8081+7890）**
+>
+> **① 网关通道三个网络健壮性缺陷已修复并单测收口（提交 569908f / 825cc29 / 6896f42，187 测试绿）**：真机静默丢包下裸 fetch 永不 settle → 加 AbortController+`Promise.race` 30s 硬超时（不依赖 abort 单独生效）；GoTrue `getSession()` 直连被墙域名内部锁挂起 → 加 5s 兜底降级匿名通道；`abort()` 在 Expo Go/OkHttp 未必能 reject 挂起 Promise → 硬超时保证业务必落定。新增 `src/features/content/api.test.ts` 12 例覆盖契约/错误分类/JWT/超时/降级/定时器清理。
+>
+> **② 第九组 9.1 匿名祝福真机通过**：双兜底后换新文案成功，Metro JS 日志零错误。独立 curl 证明礼物接口同路径 2.36s 正常返回 6 个三字段齐全礼物（9.2 App 内复测待做）。
+>
+> **③ 数据通道已切上海反代（提交 d67da54）**：`supabase.ts` 的 `SUPABASE_URL` 由 supabase.co 直连改为 `https://api.talentspec.top`，注释写明回滚地址与 functions 路径未放行。公网 curl 实测反代 `/auth/v1/settings`（带 anon 200 + GoTrue 真实配置）、`/rest/v1/persons`（带 anon 200 + RLS `[]`）均回源本项目，限路径未放行 functions。
+>
+> **④ ⚠️ 关键未决：9.6 数据通道与首登 claim 尚未经真机确定性验证。** 重启后 App 进了主界面，但主机 `/var/log/nginx/access.log` 当日 auth/rest 记录**全是本地电脑 curl（IP 111.196.243.34），无一条手机请求**；结合「index 守卫与 `authStore.initialize` 恢复会话的时序竞态」，判定此次进主界面是 runCheck 跑在 session 恢复前、命中**匿名仓储**（3 条联系人本就 `user_id IS NULL`）所致，**不能据此认定反代 claim 成功**。背景：设备残留登录会话 fc67221b，而 supabase.co 被墙时首登 `claimAnonymousRows` 从未联网完成；标准退出登录第一步 `supabase.auth.signOut()` 也连被墙域名、必失败，故拍板切反代而非退出。
+>
+> **⑤ 下次开工首先做（确定性验证 9.6，排除竞态）**：主机侧 `tail -f /var/log/nginx/access.log | grep -E 'auth/v1|rest/v1'` 实时盯日志 → 手机杀进程冷启动（确保 session 已持久化、守卫跑在恢复后）→ 确认主机出现**手机出口 IP** 的 auth/rest 200 行 → 再在 App 内做一次云端写（如新增联系人）验证在线写同步与本机 user_id 改写（claim）。若手机挂 7890 代理导致流量不到上海 Nginx，先关代理直连复测。随后按清单续做 9.2–9.5 及其余八组。
+
 ---
 
 # M12.5　联网体验与隐私合规收尾（2026-11-02 开发者拍板纳入第一版）
