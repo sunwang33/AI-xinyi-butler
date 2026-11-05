@@ -19,6 +19,31 @@ const FUNCTION_NAME = 'generate-content';
  */
 const RELAY_TIMEOUT_MS = 30_000;
 
+/**
+ * 登录态读取兜底超时（T58 真机联调抓出，2026-11-05）。
+ * 数据通道切到备案反代前，supabase-js 直连被墙域名刷新 token 时，其内部锁/重试
+ * 会让 getSession() 排队挂起，连带生成请求卡死。取不到登录态就降级匿名通道
+ * （未登录本就可完整使用），绝不让鉴权依赖阻塞生成。
+ */
+const SESSION_TIMEOUT_MS = 5_000;
+
+/** 带超时的登录态读取：失败、超时一律降级为匿名（返回 undefined） */
+async function getAuthTokenWithFallback(): Promise<string | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('getSession_timeout')), SESSION_TIMEOUT_MS);
+    });
+    const { data } = await Promise.race([supabase.auth.getSession(), timeout]);
+    return data.session?.access_token;
+  } catch {
+    // 网络被墙 / 锁等待 / 超时 / 会话异常：降级匿名，网关 x-api-key 通道仍完整可用
+    return undefined;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** 与服务端入参契约（server/src/types.js、Edge types.ts）保持一致 */
 interface RequestBody {
   kind: 'blessing' | 'gift';
@@ -55,8 +80,8 @@ async function invokeRelay(body: RequestBody): Promise<unknown> {
     // 匿名通道标识（anon key 本就公开）；有登录态时服务端优先走 JWT 分支
     'x-api-key': SUPABASE_ANON_KEY,
   };
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  // 带 5s 兜底：auth 域名被墙/锁挂起时降级匿名，不阻塞生成
+  const token = await getAuthTokenWithFallback();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }

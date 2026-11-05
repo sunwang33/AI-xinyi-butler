@@ -126,6 +126,39 @@ describe('上海网关通道 · 错误分类', () => {
   });
 });
 
+describe('上海网关通道 · 登录态读取挂起降级（T58 真机抓出的 getSession 卡死）', () => {
+  it('getSession 永不返回：5s 后降级匿名，请求照常发出且不带 JWT', async () => {
+    jest.useFakeTimers();
+    // 模拟 GoTrue 锁等待：getSession 不 resolve 也不 reject
+    mockGetSession.mockReturnValue(new Promise(() => {}));
+    globalThis.fetch = jest.fn(async () =>
+      jsonResponse(200, { kind: 'blessing', blessings: ['甲'] }),
+    ) as any;
+
+    const pending = fetchBlessings(context, 1);
+    // 推进 5s（SESSION_TIMEOUT_MS），Async 变体排空微任务让降级链路落定
+    await jest.advanceTimersByTimeAsync(5_000);
+    const list = await pending;
+
+    expect(list).toEqual(['甲']);
+    const [, init] = (globalThis.fetch as any).mock.calls[0];
+    expect(init.headers.Authorization).toBeUndefined();
+    expect(init.headers['x-api-key']).toBe('test-anon-key');
+  });
+
+  it('getSession 直接拒绝（auth 域名被墙快速失败）：立即降级匿名，不等 5s', async () => {
+    mockGetSession.mockRejectedValue(new Error('AuthRetryableFetchError'));
+    globalThis.fetch = jest.fn(async () =>
+      jsonResponse(200, { kind: 'blessing', blessings: ['甲'] }),
+    ) as any;
+
+    const list = await fetchBlessings(context, 1);
+    expect(list).toEqual(['甲']);
+    const [, init] = (globalThis.fetch as any).mock.calls[0];
+    expect(init.headers.Authorization).toBeUndefined();
+  });
+});
+
 describe('上海网关通道 · 30s 客户端超时兜底（T58 真机抓出的挂死缺陷）', () => {
   it('上游静默不响应：30s 主动 abort，按 network 失败且请求只发一次', async () => {
     jest.useFakeTimers();
