@@ -774,6 +774,12 @@
     - **IPv6 套接字选项冲突**：求职站 vhost 已对 `[::]:443` 指定 `ipv6only=on`（socket 级选项不可重复），新 vhost 改为 `listen [::]:443 ssl;` 不带该选项，`nginx -t` 通过；
     - **「节日文案漂移端午」排查定论（非生产缺陷）**：公网 curl 中秋/春节稳定回端午、礼物报 relation 非法，根因是 Windows Git Bash 的 `curl -d` 内联中文按系统 GBK 代码页发字节、服务端按 UTF-8 解成乱码，模型读不到有效字段便回退最高频先验；字节级对照实验双向证实——真 UTF-8（`e4 b8 ad`）载荷两次均正确返回中秋文案、真 GBK（`d6 d0`）载荷稳定复现端午，主机 Linux 原生 UTF-8 全程正常。App 端 RN `fetch`+`JSON.stringify` 恒发 UTF-8，不受影响。
   **待办（需开发者在场）**：翻 `gateway.ts` 开关 true → 随 T58 真机匿名/登录两通道各生成祝福与礼物 → 反代稳定后再切 `supabase.ts` 数据通道 base URL → 收口动作（轮换 DeepSeek key、撤销重建 sbp_ 令牌、SSH 加固、网关稳定一个版本后停用旧 Edge 函数）。
+  ⑧ **2026-11-05 新增一键换机部署脚本（提交 `4ea12f4`/`b4d1118`，`server/deploy/`）**：本机 `deploy.sh` + 主机幂等 `remote/setup-host.sh` + `@@占位@@` 模板 + `MIGRATION.md`，本地仅干跑验证（语法/渲染/LF），**尚未端到端实跑**。
+     - ⏰ **2026-11-06 开工第一件事：在当前生产主机（124.223.173.79）试跑 `bash server/deploy/deploy.sh` 验证幂等**（用户已点名）。
+     - 准备 `server/deploy/deploy.env`（gitignore，勿提交）：`SUPABASE_ANON_KEY` 取 `rnapp/src/lib/supabase.ts`；**`DEEPSEEK_API_KEY` 现仅存主机 `/www/wwwroot/xinyi-gateway/ecosystem.config.cjs`（600），先 `ssh` 读出再填**，本地仓库无此密钥。
+     - 跑前安全比对：先用模板按现网变量渲染 Nginx/ecosystem，与主机现网 `/etc/nginx/conf.d/xinyi-api.conf`、`ecosystem.config.cjs` `diff` 确认等价；脚本本身会先存 `.bak.时间戳` 且 `nginx -t` 失败自动回滚，不影响同机求职站（3000）。
+     - 跑后验收：`pm2 list` 在线、`curl https://api.talentspec.top/health` 200、`/auth/v1/settings` 带 anon 200、求职站 3000 正常；随后顺接 T58 **9.6 确定性复测**（主机 `tail -f /var/log/nginx/access.log` 盯手机 IP 的 auth/rest 200 + 手机冷启动，排除 index 守卫时序竞态）。
+     - 回滚：Nginx 用 `.bak.时间戳` 还原；PM2 `pm2 reload`；异常先 `pm2 logs xinyi-gateway`。
 
 ### T58　账号链路真机验收
 
