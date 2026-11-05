@@ -227,8 +227,15 @@ async function main() {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
-// 仅直接运行本文件时启动服务；被测试 import 时不监听端口
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// 启动入口判断：被测试 import 时不监听端口。
+// ① 直接 `node src/index.js`：argv[1] 即本文件，URL 相等；
+// ② PM2 fork 模式：经 ProcessContainerFork 包装器加载，argv[1] 不是本文件，
+//    但 PM2 会注入 pm_id 环境变量，据此识别（2026-11-05 主机部署实证，缺此分支 main() 不执行）。
+const isDirectRun =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const isPm2Run = process.env.pm_id !== undefined;
+
+if (isDirectRun || isPm2Run) {
   main().catch((err) => {
     console.error('网关启动失败：', err.message);
     process.exit(1);

@@ -21,7 +21,7 @@ module.exports = {
       max_memory_restart: '200M',
       env: {
         NODE_ENV: 'production',
-        PORT: '3000',
+        PORT: '3210',
         DEEPSEEK_API_KEY: '在此填入真实密钥',
         SUPABASE_URL: 'https://wohcvgarvrizbbcepggg.supabase.co',
         SUPABASE_ANON_KEY: '在此填入 anon key（与 App 同一把）',

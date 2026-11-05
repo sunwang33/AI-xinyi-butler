@@ -768,7 +768,12 @@
   ④ `app/service-notice.tsx` 新增「账号登录与云端同步」一节（登录可选/七类上云数据/三类仅本机数据/境外存储指向隐私政策/离线只读/退出清留可选），原"账号功能上线时补充"占位删除；AI 中转措辞改为"经我们自己的服务端转发"（两通道均成立）。**该节合规文案为 AI 起草，待开发者审阅拍板。**
   ⑤ **旧 Edge 函数处置（实施时记录）**：暂保留为备用回退通道（Nginx 精确反代了它），待网关生产稳定一个版本、T58 全量验收后再停用，届时删 Nginx functions 段、删 App edge 分支、Dashboard 删函数。
   ⑥ 同日晚补齐鉴权与 HTTP 层测试：`server/test/auth.test.js`（7 例：Bearer 通过/大小写空白容忍/上游 401 与网络异常/失败不缓存/60 秒正缓存命中/匿名 key 对错/匿名按 IP 建键）；`server/test/httpGateway.test.js`（11 例真实端口端到端：health/OPTIONS/404/405/401 双因/匿名祝福与登录用户 200/礼物必须有人/bad_json·bad_request/匿名 429/上游 502/16KB 大包）。为支持注入假鉴权与假上游，`src/index.js` 小重构为 `createGatewayServer(deps)` 工厂（只造 server 不监听），直接运行文件时才读配置 listen（import.meta.url 判断）；真实进程冒烟已通过（startup 日志、默认限频 24/30、/health 200）。服务端自测共 **27/27**。
-  **待办（需开发者在场）**：按 `server/README.md` 主机部署（DNS→PM2→Nginx/证书→curl 四验收）→真机匿名/登录两通道各生成祝福与礼物→翻开关 true→反代稳定后再切 `supabase.ts` 数据通道 base URL→随 T58 一起真机收口。
+  ⑦ **2026-11-05 上海主机部署完成（`api.talentspec.top` → 124.223.173.79，系统 Nginx 1.29.8 + PM2 7.1.2 + certbot，LE 证书自动续期带 nginx reload hook）**，公网六条验收全过（health 200／无 key 401／anon 200 出真实祝福／假 JWT 401／80→301／`/auth/v1/` 反代穿透 401），主机原有求职站全程零中断。部署期暴露并修复四个环境性缺陷（代码/模板/文档已同步）：
+    - **端口让路**：主机 3000 已被现有 Next.js 求职站占用，网关默认端口统一改 **3210**（`config.js`/ecosystem 模板/.env.example/Nginx 模板/README 全量改，注释标注勿改回）；
+    - **PM2 入口守卫失效**：ESM 的 `import.meta.url === pathToFileURL(argv[1])` 在 PM2 fork 的 ProcessContainerFork 包装器下恒 false，导致进程 online 但 `main()` 从未执行（27 自测走工厂函数无法捕获）；`index.js` 增加 `process.env.pm_id` 识别分支，本地模拟 PM2 环境验证 startup 正常；
+    - **IPv6 套接字选项冲突**：求职站 vhost 已对 `[::]:443` 指定 `ipv6only=on`（socket 级选项不可重复），新 vhost 改为 `listen [::]:443 ssl;` 不带该选项，`nginx -t` 通过；
+    - **「节日文案漂移端午」排查定论（非生产缺陷）**：公网 curl 中秋/春节稳定回端午、礼物报 relation 非法，根因是 Windows Git Bash 的 `curl -d` 内联中文按系统 GBK 代码页发字节、服务端按 UTF-8 解成乱码，模型读不到有效字段便回退最高频先验；字节级对照实验双向证实——真 UTF-8（`e4 b8 ad`）载荷两次均正确返回中秋文案、真 GBK（`d6 d0`）载荷稳定复现端午，主机 Linux 原生 UTF-8 全程正常。App 端 RN `fetch`+`JSON.stringify` 恒发 UTF-8，不受影响。
+  **待办（需开发者在场）**：翻 `gateway.ts` 开关 true → 随 T58 真机匿名/登录两通道各生成祝福与礼物 → 反代稳定后再切 `supabase.ts` 数据通道 base URL → 收口动作（轮换 DeepSeek key、撤销重建 sbp_ 令牌、SSH 加固、网关稳定一个版本后停用旧 Edge 函数）。
 
 ### T58　账号链路真机验收
 

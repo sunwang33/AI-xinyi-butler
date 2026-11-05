@@ -5,7 +5,7 @@
 # 证书：宝塔「SSL → Let's Encrypt」一键申请（或 certbot），证书路径以实际为准
 #
 # 本文件一个 server 块同时承载两类反代（App 只换 supabaseUrl + 生成网关地址）：
-#   1. AI 生成网关 /api/generate → 本机 Node 服务 127.0.0.1:3000
+#   1. AI 生成网关 /api/generate → 本机 Node 服务 127.0.0.1:3210（3000 被主机原有服务占用，勿改回）
 #   2. Supabase /auth/v1/、/rest/v1/（含旧 Edge /functions 回退）→ 首尔项目
 # 其他路径一律 404，绝不做成开放代理。
 
@@ -37,12 +37,12 @@ server {
 
     # ---------- ① AI 生成网关 ----------
     location = /health {
-        proxy_pass http://127.0.0.1:3000/health;
+        proxy_pass http://127.0.0.1:3210/health;
         proxy_set_header Host $host;
     }
 
     location = /api/generate {
-        proxy_pass http://127.0.0.1:3000/api/generate;
+        proxy_pass http://127.0.0.1:3210/api/generate;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         # 关键：覆盖而非追加，服务端取 XFF 链首做匿名限频，防止客户端伪造

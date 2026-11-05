@@ -57,7 +57,7 @@ chmod 600 ecosystem.config.cjs
 node --test                 # 部署后先跑一遍自测
 pm2 start ecosystem.config.cjs
 pm2 save && pm2 startup     # 开机自启（按提示再执行输出的命令）
-curl -s http://127.0.0.1:3000/health    # {"ok":true}
+curl -s http://127.0.0.1:3210/health    # {"ok":true}
 ```
 
 - `DEEPSEEK_API_KEY`：原 Supabase secret（Dashboard → Edge Functions → Secrets，或密钥保管处）。
@@ -74,8 +74,8 @@ curl -s http://127.0.0.1:3000/health    # {"ok":true}
 
 | 路径 | 去向 | 说明 |
 |---|---|---|
-| `POST /api/generate` | `127.0.0.1:3000` | AI 生成网关 |
-| `GET /health` | `127.0.0.1:3000` | 存活探针 |
+| `POST /api/generate` | `127.0.0.1:3210` | AI 生成网关 |
+| `GET /health` | `127.0.0.1:3210` | 存活探针 |
 | `/auth/v1/*`、`/rest/v1/*` | Supabase 首尔 | App 登录与数据通道 |
 | `= /functions/v1/generate-content` | Supabase 首尔 | 仅旧 Edge 回退通道 |
 | 其他 | 404 | 不做开放代理 |

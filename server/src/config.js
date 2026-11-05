@@ -4,7 +4,8 @@
  */
 
 export const config = {
-  port: Number(process.env.PORT || 3000),
+  // 默认 3210：主机 3000 已被现有 Next.js 服务占用（2026-11-05 部署实证），网关让路不碰原有服务
+  port: Number(process.env.PORT || 3210),
   deepseekEndpoint: process.env.DEEPSEEK_ENDPOINT || 'https://api.deepseek.com/chat/completions',
   deepseekApiKey: process.env.DEEPSEEK_API_KEY || '',
   // 去掉末尾斜杠，避免拼出双斜杠路径

@@ -10,10 +10,13 @@
  */
 import { SUPABASE_ANON_KEY } from './supabase';
 
-/** true＝手机→上海备案主机→DeepSeek；false＝Supabase Edge Functions（T30 旧链路回退） */
-export const USE_SHANGHAI_GATEWAY = false;
+/**
+ * true＝手机→上海备案主机→DeepSeek；false＝Supabase Edge Functions（T30 旧链路回退）。
+ * 2026-11-05 主机部署与公网六条验收通过后翻转，T58 真机联调若有问题可临时翻回 false。
+ */
+export const USE_SHANGHAI_GATEWAY = true;
 
-/** 上海主机 AI 生成网关地址（Nginx：/api/generate → 本机 Node 127.0.0.1:3000） */
+/** 上海主机 AI 生成网关地址（Nginx：/api/generate → 本机 Node 127.0.0.1:3210） */
 export const SHANGHAI_GATEWAY_URL = 'https://api.talentspec.top/api/generate';
 
 export { SUPABASE_ANON_KEY };
