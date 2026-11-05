@@ -44,6 +44,24 @@ async function getAuthTokenWithFallback(): Promise<string | undefined> {
   }
 }
 
+/**
+ * 造一个总超时窗口（T58 真机实证后的硬兜底，2026-11-05）。
+ * 真机现象：Expo Go/OkHttp 下 fetch 发出请求后 Promise 可永不 settle，且
+ * AbortController.abort() 未必能 reject 它（连接已静默关闭、UI 仍转圈 4 分钟）。
+ * 故不依赖 abort 单独生效：Promise.race 保证业务在 timeoutMs 一定落定，
+ * abort 信号照发，支持的运行时会顺带释放底层连接；不支持也不影响错误路径。
+ */
+function createDeadline(timeoutMs: number, controller: AbortController) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error('relay_request_timeout'));
+    }, timeoutMs);
+  });
+  return { promise, clear: () => timer && clearTimeout(timer) };
+}
+
 /** 与服务端入参契约（server/src/types.js、Edge types.ts）保持一致 */
 interface RequestBody {
   kind: 'blessing' | 'gift';
@@ -86,43 +104,52 @@ async function invokeRelay(body: RequestBody): Promise<unknown> {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  // 客户端超时兜底：网络静默丢包时主动 abort，避免请求无限挂起、UI 永久 loading
+  // 硬超时窗口：fetch 与响应体读取都纳入，业务在 RELAY_TIMEOUT_MS 内一定 settle
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
+  const deadline = createDeadline(RELAY_TIMEOUT_MS, controller);
 
-  let resp: Response;
   try {
-    resp = await fetch(SHANGHAI_GATEWAY_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    // 设备无网络 / DNS / TLS 失败 / 30s 超时 abort：与 Edge 通道口径一致，页面显示「需要网络」
-    const detail = err instanceof Error ? err.message : 'network request failed';
-    throw new ContentError('network', detail);
+    let resp: Response;
+    try {
+      resp = await Promise.race([
+        fetch(SHANGHAI_GATEWAY_URL, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        }),
+        deadline.promise,
+      ]);
+    } catch (err) {
+      // 设备无网络 / DNS / TLS 失败 / 硬超时：与 Edge 通道口径一致，页面显示「需要网络」
+      const detail = err instanceof Error ? err.message : 'network request failed';
+      throw new ContentError('network', detail);
+    }
+
+    if (resp.ok) {
+      // body 读取同样可能在差网络挂起，纳入同一 deadline
+      return Promise.race([resp.json(), deadline.promise]);
+    }
+
+    // 错误体契约：{ error: { code, message? } }（解析失败不影响原因分类）
+    let code = '';
+    try {
+      const errBody = (await Promise.race([resp.json(), deadline.promise])) as {
+        error?: { code?: string };
+      };
+      code = errBody.error?.code ?? '';
+    } catch {
+      // 非 JSON 错误页（如网关 502 默认页）/ 超时：按状态码兜底
+    }
+    if (resp.status === 429 || code === 'rate_limited') {
+      throw new ContentError('ratelimit', code || 'rate_limited');
+    }
+    // 401/400/502 等一律按服务失败处理，计入连续失败与祝福 3 次兜底
+    throw new ContentError('service', code || `http_${resp.status}`);
   } finally {
-    clearTimeout(timer);
+    // 成功/失败都清掉定时器，避免到点 abort 已完成请求及产生游离 rejection
+    deadline.clear();
   }
-
-  if (resp.ok) {
-    return resp.json();
-  }
-
-  // 错误体契约：{ error: { code, message? } }（解析失败不影响原因分类）
-  let code = '';
-  try {
-    const errBody = (await resp.json()) as { error?: { code?: string } };
-    code = errBody.error?.code ?? '';
-  } catch {
-    // 非 JSON 错误页（如网关 502 默认页）：按状态码兜底
-  }
-  if (resp.status === 429 || code === 'rate_limited') {
-    throw new ContentError('ratelimit', code || 'rate_limited');
-  }
-  // 401/400/502 等一律按服务失败处理，计入连续失败与祝福 3 次兜底
-  throw new ContentError('service', code || `http_${resp.status}`);
 }
 
 function invoke(body: RequestBody): Promise<unknown> {

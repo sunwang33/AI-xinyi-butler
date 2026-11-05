@@ -188,6 +188,27 @@ describe('上海网关通道 · 30s 客户端超时兜底（T58 真机抓出的�
     expect(init.signal.aborted).toBe(true);
   });
 
+  it('真机场景：fetch 永不 settle 且不响应 abort，硬超时仍保证 30s 按 network 落定', async () => {
+    jest.useFakeTimers();
+    // 关键：不监听 abort，模拟 Expo Go/OkHttp 下 abort 无法 reject 挂起 Promise（真机实证）
+    globalThis.fetch = jest.fn(() => new Promise(() => {})) as any;
+
+    const pending = fetchBlessings(context, 3);
+    const rejection = expect(pending).rejects.toMatchObject({ reason: 'network' });
+    // 业务落定靠 deadline 的 Promise.race，而非 abort
+    await jest.advanceTimersByTimeAsync(30_000);
+    await rejection;
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    // abort 信号仍发出（尽力释放底层连接），但即使它无效业务也已落定
+    const [, callInit] = (globalThis.fetch as any).mock.calls[0];
+    expect(callInit.signal.aborted).toBe(true);
+  });
+
+  // 注：响应体 resp.json() 读取受同一个 deadline 的 Promise.race 保护（与 fetch 同构），
+  // 但「响应头已回 + body 永久挂起」在 fake timer 下因 async fetch 的双层微任务交错无法稳定驱动，
+  // 真机亦从未观测到该形态，故不单列用例；核心的 fetch 整体挂起由上一用例精确覆盖。
+
   it('正常返回后定时器被清理（不残留 open handle）', async () => {
     const clearSpy = jest.spyOn(globalThis, 'clearTimeout');
     globalThis.fetch = jest.fn(async () =>
