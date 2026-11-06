@@ -802,14 +802,16 @@
 >
 > **⑤ 下次开工首先做（确定性验证 9.6，排除竞态）**：主机侧 `tail -f /var/log/nginx/access.log | grep -E 'auth/v1|rest/v1'` 实时盯日志 → 手机杀进程冷启动（确保 session 已持久化、守卫跑在恢复后）→ 确认主机出现**手机出口 IP** 的 auth/rest 200 行 → 再在 App 内做一次云端写（如新增联系人）验证在线写同步与本机 user_id 改写（claim）。若手机挂 7890 代理导致流量不到上海 Nginx，先关代理直连复测。随后按清单续做 9.2–9.5 及其余八组。
 >
-> **⑥ 2026-11-06 进展：9.6 通道确定性验证通过；同步引擎四缺陷修复待真机复验。**
+> **⑥ 2026-11-06 进展：9.6 通道确定性验证通过；同步引擎五个缺陷修复（云端侧 3 + 缓存死代码 1 + 本机去重 1）待真机复验。**
 > - **「零请求」根因翻案**：不是 index 守卫时序竞态，而是设备残留会话已失效、实际处于**未登录态**，`getCurrentUserId()` 恒 null，所有同步入口直接 return（手动切后台/回前台仍零请求佐证）。
 > - **忘记密码全链路真机通过**：App 内发起 → 反代 `/auth/v1/recover` 200 → GitHub Pages 重置页改密 → 新密码 `/auth/v1/token` 200 登录、旧密码失效。
 > - **9.6 数据通道硬证据达标**：主机 access.log 出现 okhttp/4.12.0 UA（手机，区别于电脑 curl）的完整链路 200——recover → token → 七表合并 GET/POST；反代网络层无病（手机直连 curl health 200、auth 401 均 0.5s 级）。
 > - **登录后暴露首登合并三缺陷（409 实测钉死）**：A 三表（content_snapshots/card_states/sent_records）COALESCE 表达式唯一索引下同业务键异 id 行盲 INSERT 必 409，`onConflict=id` 无法处理；B 单表失败直接炸断整链、`pullAll` 不执行，云端同 id 行拉不回导致联系人「隐身」；C 旧 `claimAnonymousRows` 全表 `user_id IS NULL` 一把盖，失败表也被误认领永久漏传。
 > - **修复（本次提交）**：业务键查重（`applyOccasionFilters` + maybeSingle，sent_records 加 kind）→ 异 id 时本机较新 PATCH 云端行、云端较新跳过，无论谁新都把本机行 id 收敛（`rewriteRowId`）到云端 id；逐表 try/catch 容错且 `pullAll` 必跑；按成功 id 精确 claim（`claimRowsByIds`），失败表匿名行保留可重试。
-> - **单测额外抓出第四缺陷**：`enqueue` 的 `.catch` 吞掉 job 抛错以保串行链不断，致使 `firstSyncForUser` 挂在 rejection 分支的 `firstSyncs.delete` 是死代码——失败后本次运行期内回前台/写后全部命中缓存承诺短路，失败表须等重启才重试。改为 job 内 `hadFailures` 主动清缓存。新增 `src/lib/sync.test.ts` 6 例（真实 node:sqlite 内存库 + PostgREST 链式桩），全量 **20 套件 193 测试绿**、typecheck/lint 双零。工程坑：jest-expo SDK58 下生效的 `@jest-environment node` 会触发 expo/winter require 作用域错误，不写注解跑默认环境即可（默认环境支持 node:sqlite）。
-> - **待办**：手机热更新代码后重验首登同步（预期联系人自愈、主机日志七表 pull 200 无 409、claim 生效），随后续做 9.2–9.5 及其余八组与 T79。
+> - **单测额外抓出第四缺陷**：`enqueue` 的 `.catch` 吞掉 job 抛错以保串行链不断，致使 `firstSyncForUser` 挂在 rejection 分支的 `firstSyncs.delete` 是死代码——失败后本次运行期内回前台/写后全部命中缓存承诺短路，失败表须等重启才重试。改为 job 内 `hadFailures` 主动清缓存。
+> - **热更后真机日志抓出第五缺陷（本机 SQLite code 19，非云端 409）**：`UNIQUE constraint failed: content_snapshots.id/card_states.id`。结构性根因——本机三表唯一索引 **user_id 领先**，同业务键的匿名行 `(零uuid,K)` 与账号行 `(真实uid,K)` 索引键不同、允许共存；两天内旧代码 409、多次热更、pull/claim 交错后设备攒出此类行，`rewriteRowId` 把匿名行改成已被 pullAll 拉回的云端 id 时撞本机主键，且每次重试同点炸、整表永久卡死。修复：收敛前查本机全表 id，目标 id 已占用则先做完 PATCH 裁决再物理删除冗余匿名行（三表主键无外表外键引用无级联；云端同业务键唯一，pull 会让内容落云端行，不丢数据），并打 `[sync] 合并去重` 警告留痕。
+> - 新增 `src/lib/sync.test.ts` 8 例（真实 node:sqlite 内存库 + PostgREST 链式桩，含两个真机状态回归用例），全量 **20 套件 195 测试绿**、typecheck/lint 双零。工程坑：jest-expo SDK58 下生效的 `@jest-environment node` 会触发 expo/winter require 作用域错误，不写注解跑默认环境即可（默认环境支持 node:sqlite）；mock 桩对象须用懒 `require` 引入被测模块，静态 import 会先于桩常量求值拿到 undefined。
+> - **待办**：手机完全重载 bundle（Fast Refresh 不清 sync 模块状态，需 Expo Go 内 Reload/杀进程重进）后重验首登同步（预期联系人自愈、主机日志七表 pull 200 无 409、logcat 无同步异常、去重警告出现即佐证现场判断），随后续做 9.2–9.5 及其余八组与 T79。
 
 ---
 

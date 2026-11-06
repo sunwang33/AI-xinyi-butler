@@ -282,6 +282,55 @@ describe('firstSyncForUser 首登静默合并（T58 三缺陷回归）', () => {
     expect(attemptsAfter).toBeGreaterThan(attemptsBefore);
   });
 
+  it('真机回归：匿名行与已拉回的账号行同业务键共存（user_id 领先索引允许）→ 删冗余不抛错', async () => {
+    // 模拟真机现场：pullAll 已拉回云端行（带账号 id），匿名空间还残留同业务键行。
+    // 本机唯一索引 user_id 领先，(NULL,K) 与 (uid,K) 索引键不同，两行可共存。
+    await mockDb.runAsync(
+      `INSERT INTO content_snapshots (id, person_id, occasion_type, anniversary_id, festival_code,
+         year, blessings, gifts, status, fail_count, generated_at, user_id, created_at, updated_at, deleted)
+       VALUES ('snap-cloud', NULL, 'birthday', NULL, NULL, 2026, NULL, NULL, 'success', 0, NULL,
+         'user-g', ?, ?, 0)`,
+      T2,
+      T2,
+    );
+    await insertAnonymousSnapshot('snap-local', T1);
+    mockByKey.content_snapshots = { id: 'snap-cloud', updated_at: T2, deleted: false };
+
+    await firstSyncForUser('user-g');
+
+    // 匿名冗余行被物理删除，云端 id 行保留，全程无异常、无盲插 upsert
+    const rows: { id: string; user_id: string | null }[] = await mockDb.getAllAsync(
+      'SELECT id, user_id FROM content_snapshots',
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('snap-cloud');
+    expect(rows[0].user_id).toBe('user-g');
+    expect(mockUpserts.filter((c) => c.table === 'content_snapshots')).toHaveLength(0);
+  });
+
+  it('真机回归：冗余匿名行比云端新 → 先 PATCH 云端再删本机冗余，内容不丢', async () => {
+    await mockDb.runAsync(
+      `INSERT INTO content_snapshots (id, person_id, occasion_type, anniversary_id, festival_code,
+         year, blessings, gifts, status, fail_count, generated_at, user_id, created_at, updated_at, deleted)
+       VALUES ('snap-cloud', NULL, 'birthday', NULL, NULL, 2026, NULL, NULL, 'success', 0, NULL,
+         'user-h', ?, ?, 0)`,
+      T1,
+      T1,
+    );
+    // 匿名行更新时间更晚（T2 > T1）
+    await insertAnonymousSnapshot('snap-local', T2);
+    mockByKey.content_snapshots = { id: 'snap-cloud', updated_at: T1, deleted: false };
+
+    await firstSyncForUser('user-h');
+
+    const patchReqs = mockUpdates.filter((c) => c.table === 'content_snapshots');
+    expect(patchReqs).toHaveLength(1);
+    expect(patchReqs[0].filters).toContainEqual({ col: 'id', val: 'snap-cloud' });
+    const rows = await mockDb.getAllAsync('SELECT id FROM content_snapshots');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('snap-cloud');
+  });
+
   it('sent_records 业务键查询额外带 kind 过滤', async () => {
     // sent_records.person_id 有外键约束，先造父行人
     await insertAnonymousPerson('p1', '妈妈', T1);

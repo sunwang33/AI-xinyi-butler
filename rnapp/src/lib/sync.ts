@@ -201,7 +201,12 @@ async function mergeTable(
 
   // 2) 表达式唯一索引表：逐行按业务键查「同键异 id」的云端行（409 根源）
   const remoteKeyByLocalId = new Map<string, { id: string; updatedAt: string }>();
+  // 本机全表现有主键：同业务键重复匿名行收敛到同一云端 id 时，用来判断目标 id 是否已被占用
+  let localExistingIds: Set<string> | null = null;
   if (BUSINESS_KEY_TABLES.has(table)) {
+    localExistingIds = new Set(
+      (await db.getAllAsync<{ id: string }>(`SELECT id FROM ${table}`)).map((row) => row.id),
+    );
     for (const local of locals) {
       const keyHit = await findRemoteByBusinessKey(table, local);
       if (keyHit) remoteKeyByLocalId.set(local.id, keyHit);
@@ -217,7 +222,7 @@ async function mergeTable(
 
     if (keyHit && keyHit.id !== local.id) {
       // 同业务键异 id：INSERT 必撞唯一索引。本机更新则 PATCH 云端既有行，
-      // 云端更新则跳过上传；无论谁新，本机 id 都收敛到云端 id，随后 pull 合内容。
+      // 云端更新则跳过上传；无论谁新，本机 id 都应收敛到云端 id，随后 pull 合内容。
       if (!isRemoteNewer(local.updatedAt, keyHit.updatedAt)) {
         const patch = adapter.toCloud(local, userId) as Record<string, unknown>;
         // PATCH 不动主键与建号时间：id 以云端行为准，created_at 保留云端原值
@@ -226,7 +231,16 @@ async function mergeTable(
         const { error } = await supabase.from(table).update(patch).eq('id', keyHit.id);
         if (error) throw translateCloudError(error, '云端数据合并失败');
       }
-      await rewriteRowId(db, table, local.id, keyHit.id);
+      if (localExistingIds?.has(keyHit.id)) {
+        // 本机已有同云端 id 的行（典型：同业务键重复匿名行，前一行已收敛/或曾被 pull 拉回）：
+        // 云端表达式唯一索引保证同业务键只有一行，当前行属本机冗余，物理删除而非改 id
+        // （改 id 必撞本机主键 UNIQUE，会让该表每次重试都卡死）；三表主键无外表外键引用，无级联。
+        await db.runAsync(`DELETE FROM ${table} WHERE id = ?`, local.id);
+        console.warn(`[sync] 合并去重：${table} 本机同业务键重复行 ${local.id} 已删除，收敛到 ${keyHit.id}`);
+      } else {
+        await rewriteRowId(db, table, local.id, keyHit.id);
+        localExistingIds?.add(keyHit.id);
+      }
       claimedIds.push(keyHit.id);
       continue;
     }
