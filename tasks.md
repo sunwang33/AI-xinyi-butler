@@ -811,7 +811,8 @@
 > - **单测额外抓出第四缺陷**：`enqueue` 的 `.catch` 吞掉 job 抛错以保串行链不断，致使 `firstSyncForUser` 挂在 rejection 分支的 `firstSyncs.delete` 是死代码——失败后本次运行期内回前台/写后全部命中缓存承诺短路，失败表须等重启才重试。改为 job 内 `hadFailures` 主动清缓存。
 > - **热更后真机日志抓出第五缺陷（本机 SQLite code 19，非云端 409）**：`UNIQUE constraint failed: content_snapshots.id/card_states.id`。结构性根因——本机三表唯一索引 **user_id 领先**，同业务键的匿名行 `(零uuid,K)` 与账号行 `(真实uid,K)` 索引键不同、允许共存；两天内旧代码 409、多次热更、pull/claim 交错后设备攒出此类行，`rewriteRowId` 把匿名行改成已被 pullAll 拉回的云端 id 时撞本机主键，且每次重试同点炸、整表永久卡死。修复：收敛前查本机全表 id，目标 id 已占用则先做完 PATCH 裁决再物理删除冗余匿名行（三表主键无外表外键引用无级联；云端同业务键唯一，pull 会让内容落云端行，不丢数据），并打 `[sync] 合并去重` 警告留痕。
 > - 新增 `src/lib/sync.test.ts` 8 例（真实 node:sqlite 内存库 + PostgREST 链式桩，含两个真机状态回归用例），全量 **20 套件 195 测试绿**、typecheck/lint 双零。工程坑：jest-expo SDK58 下生效的 `@jest-environment node` 会触发 expo/winter require 作用域错误，不写注解跑默认环境即可（默认环境支持 node:sqlite）；mock 桩对象须用懒 `require` 引入被测模块，静态 import 会先于桩常量求值拿到 undefined。
-> - **待办**：手机完全重载 bundle（Fast Refresh 不清 sync 模块状态，需 Expo Go 内 Reload/杀进程重进）后重验首登同步（预期联系人自愈、主机日志七表 pull 200 无 409、logcat 无同步异常、去重警告出现即佐证现场判断），随后续做 9.2–9.5 及其余八组与 T79。
+> - **✅ 2026-11-06 下午冷启动复验通过（清单 3.1/9.6 打勾）**：杀进程重进后主机 okhttp 17 条新请求（15×200＋persons/traits POST 201，零 409）；Metro 出现两条「合并去重」警告（snapshots/card_states 各删 1 冗余行）后无 ERROR；联系人 4 位全部自愈可见，「网络测试」祝福/礼物/贺卡内容核对不丢。**9.3 登录 JWT 通道同会话通过**：PM2 审计 `channel:"user"`  blessing/gift 两条 200、仅 hasPerson 布尔无姓名，截图存 `docs/qa/t58-9.3-user-channel.png`、`t58-after-fix-home.png`，清单已回填。
+> - **待办（下午续）**：9.2 匿名礼物（并入第二组未登录回归）、9.4 限频中文提示、9.5 断网三因；其余组——在线写同步、未登录回归（含 T77 已送出标记重点组）、退出清/留、换号隔离、卸载重装（最后做）；T79 隐私政策。两个提交 `dd8a50f`/`34bbae4` 与清单文档尚未 push。
 
 ---
 
