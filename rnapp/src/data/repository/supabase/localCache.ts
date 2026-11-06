@@ -100,13 +100,41 @@ export async function listAnonymousRows<R, E>(
   return rows.map(map);
 }
 
-/** 首登合并上传后，把匿名行认领为当前账号（退出「清除」时据此删除） */
-export async function claimAnonymousRows(db: SQLiteDatabase, userId: string): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    for (const table of Object.keys(CLOUD_TABLE_COLUMNS) as CloudTableName[]) {
-      await db.runAsync(`UPDATE ${table} SET user_id = ? WHERE user_id IS NULL`, userId);
-    }
-  });
+/**
+ * 按主键精确认领匿名行为当前账号（首登合并成功一行才认领一行）。
+ * 取代早期「整表 user_id IS NULL 一把盖」：某张表合并失败时，其匿名行必须
+ * 保持 NULL，下次首登重试才能再次被 listAnonymousRows 读到，否则会永久漏传。
+ * 表名来自代码内常量 CLOUD_TABLE_COLUMNS，非外部输入，可安全拼进 SQL。
+ */
+export async function claimRowsByIds(
+  db: SQLiteDatabase,
+  table: CloudTableName,
+  ids: readonly string[],
+  userId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(', ');
+  await db.runAsync(
+    `UPDATE ${table} SET user_id = ? WHERE id IN (${placeholders}) AND user_id IS NULL`,
+    userId,
+    ...ids,
+  );
+}
+
+/**
+ * 本机行主键收敛：业务键（COALESCE 表达式唯一索引）撞上云端异 id 行时，
+ * 把本机行 id 改成云端 id，让随后的水位拉取按主键 ON CONFLICT 自然合入，
+ * 也避免本机唯一索引在 pull 插入云端行时二次撞键。
+ * 仅用于 content_snapshots/card_states/sent_records——三表主键不被任何其他表
+ * 外键引用，改 id 无级联；调用方须保证 newId 在本机不存在。
+ */
+export async function rewriteRowId(
+  db: SQLiteDatabase,
+  table: CloudTableName,
+  oldId: string,
+  newId: string,
+): Promise<void> {
+  await db.runAsync(`UPDATE ${table} SET id = ? WHERE id = ?`, newId, oldId);
 }
 
 /**

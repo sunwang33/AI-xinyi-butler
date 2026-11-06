@@ -4,7 +4,10 @@
  * 三条路径：
  * 1. 首登静默合并（mergeAnonymousData）：user_id IS NULL 的本机历史行按
  *    CLOUD_TABLES 顺序上传——保留原 UUID 与 created_at/updated_at，upsert(onConflict=id)；
- *    同 id 云端行 updated_at 更新时跳过本机覆盖（新者胜），随后 claim 全部匿名为当前账号；
+ *    同 id 云端行 updated_at 更新时跳过本机覆盖（新者胜）。snapshot/cardState/sentRecord
+ *    三表另做业务键查重：同键异 id 时改 PATCH 云端行并把本机 id 收敛到云端 id（表达式
+ *    唯一索引不能作 on_conflict 目标，盲插必 409）。逐表容错，只按成功行 id 精确 claim，
+ *    失败表保持匿名待下次重试；无论是否部分失败都继续执行 pullAll；
  * 2. 水位增量拉取（pullAll）：按 sync_cursors.last_pulled_at 拉 updated_at 更新行，
  *    deleted=true 物理删本机缓存（删人/删纪念日顺带取消已调度系统通知），其余按新者胜
  *    upsert；表处理顺序为 CLOUD_TABLES 的反序（子表先、persons 最后），避免 persons
@@ -14,7 +17,6 @@
  * 约束：离线静默跳过；同账号所有任务进同一条 Promise 链串行，杜绝水位竞争；
  * 合并/拉取失败只记录不打扰用户，回前台或下次写入后自动重试。
  */
-import { AppState } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { supabase } from './supabase';
 import { useNetworkStore } from './network';
@@ -29,16 +31,19 @@ import {
   type CloudTableName,
   type TimestampedRow,
 } from './syncMerge';
+import type { OccasionKey } from '../data/entities';
 import { getNotificationCanceller } from '../data/repository/notificationCanceller';
 import { resetCloudRepositories } from '../data/repository/registry';
 import { setSupabasePostWriteHook } from '../data/repository/supabase/SupabaseRepository';
 import { translateCloudError } from '../data/repository/supabase/cloudError';
+import { applyOccasionFilters } from '../data/repository/supabase/occasionQuery';
 import {
-  claimAnonymousRows,
+  claimRowsByIds,
   deleteCacheRowsByIds,
   deleteUserCache,
   getCursor,
   listAnonymousRows,
+  rewriteRowId,
   setCursor,
   upsertCacheRows,
 } from '../data/repository/supabase/localCache';
@@ -136,14 +141,50 @@ const ADAPTERS: Record<CloudTableName, SyncTableAdapter> = {
 // ---------- 首登静默合并 ----------
 
 /**
- * 合并单张表：读匿名行 → 查云端同 id 行 → 新者胜筛选 → 批量 upsert。
- * 云端冲突行（同 id）的 updated_at 由服务端维护；我们只上传本机更新或云端缺失的行。
+ * 这三张表的云端/本机业务唯一索引都是 COALESCE 表达式，不能作为 upsert 的
+ * on_conflict 目标；同业务键异 id 的行（典型：清数据/重装后本机重新生成 uuid）
+ * 盲 INSERT 必撞 23505/409，必须先按业务键查重再决定 PATCH 还是收敛 id。
  */
-async function mergeTable(db: SQLiteDatabase, table: CloudTableName, userId: string): Promise<void> {
+const BUSINESS_KEY_TABLES: ReadonlySet<CloudTableName> = new Set<CloudTableName>([
+  'content_snapshots',
+  'card_states',
+  'sent_records',
+]);
+
+/** 按「人 × 日子 × 年份」业务键查云端同键行（sent_records 再加 kind）；RLS 隐式限本人 */
+async function findRemoteByBusinessKey(
+  table: CloudTableName,
+  local: TimestampedRow,
+): Promise<{ id: string; updatedAt: string } | null> {
+  const key = local as unknown as OccasionKey;
+  let query = applyOccasionFilters(
+    supabase.from(table).select('id, updated_at, deleted'),
+    key,
+  );
+  if (table === 'sent_records') {
+    query = query.eq('kind', (local as { kind?: string }).kind);
+  }
+  const { data, error } = await query.limit(1).maybeSingle();
+  if (error) throw translateCloudError(error, '云端数据读取失败');
+  if (!data) return null;
+  return { id: data.id as string, updatedAt: data.updated_at as string };
+}
+
+/**
+ * 合并单张表：读匿名行 → 主键查重 + 业务键查重 → 新者胜裁决 → 上传/收敛。
+ * 返回成功处理、应认领到本账号名下的本机行 id 名单（业务键异 id 收敛后为云端 id）。
+ * 任一步失败直接抛出，由 mergeAnonymousData 逐表容错；失败表不 claim，匿名行保留待重试。
+ */
+async function mergeTable(
+  db: SQLiteDatabase,
+  table: CloudTableName,
+  userId: string,
+): Promise<string[]> {
   const adapter = ADAPTERS[table];
   const locals = await adapter.listAnonymous(db);
-  if (locals.length === 0) return;
+  if (locals.length === 0) return [];
 
+  // 1) 按主键批量查重：同 id 行按 updated_at 新者胜
   const ids = locals.map((row) => row.id);
   const remoteById = new Map<string, string>();
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
@@ -158,35 +199,82 @@ async function mergeTable(db: SQLiteDatabase, table: CloudTableName, userId: str
     }
   }
 
-  const payloads: Record<string, unknown>[] = [];
-  for (const local of locals) {
-    const remoteUpdatedAt = remoteById.get(local.id) ?? null;
-    if (
-      shouldUploadLocalRow(
-        { id: local.id, updatedAt: local.updatedAt },
-        remoteUpdatedAt ? { id: local.id, updatedAt: remoteUpdatedAt } : null,
-      )
-    ) {
-      payloads.push(adapter.toCloud(local, userId));
+  // 2) 表达式唯一索引表：逐行按业务键查「同键异 id」的云端行（409 根源）
+  const remoteKeyByLocalId = new Map<string, { id: string; updatedAt: string }>();
+  if (BUSINESS_KEY_TABLES.has(table)) {
+    for (const local of locals) {
+      const keyHit = await findRemoteByBusinessKey(table, local);
+      if (keyHit) remoteKeyByLocalId.set(local.id, keyHit);
     }
   }
 
+  // 3) 逐行裁决：异 id 同键走 PATCH + 本机 id 收敛；其余走主键 upsert
+  const payloads: Record<string, unknown>[] = [];
+  const claimedIds: string[] = [];
+  for (const local of locals) {
+    const sameIdRemote = remoteById.get(local.id) ?? null;
+    const keyHit = remoteKeyByLocalId.get(local.id) ?? null;
+
+    if (keyHit && keyHit.id !== local.id) {
+      // 同业务键异 id：INSERT 必撞唯一索引。本机更新则 PATCH 云端既有行，
+      // 云端更新则跳过上传；无论谁新，本机 id 都收敛到云端 id，随后 pull 合内容。
+      if (!isRemoteNewer(local.updatedAt, keyHit.updatedAt)) {
+        const patch = adapter.toCloud(local, userId) as Record<string, unknown>;
+        // PATCH 不动主键与建号时间：id 以云端行为准，created_at 保留云端原值
+        delete patch.id;
+        delete patch.created_at;
+        const { error } = await supabase.from(table).update(patch).eq('id', keyHit.id);
+        if (error) throw translateCloudError(error, '云端数据合并失败');
+      }
+      await rewriteRowId(db, table, local.id, keyHit.id);
+      claimedIds.push(keyHit.id);
+      continue;
+    }
+
+    if (
+      shouldUploadLocalRow(
+        { id: local.id, updatedAt: local.updatedAt },
+        sameIdRemote ? { id: local.id, updatedAt: sameIdRemote } : null,
+      )
+    ) {
+      // 显式 onConflict=id：同 id 冲突转 UPDATE；载荷带原始 created_at/updated_at 保留历史时间戳
+      payloads.push(adapter.toCloud(local, userId));
+    }
+    // 上传与「云端较新跳过」的行都属于本账号，统一进 claim 名单（失败抛错时整表作废不 claim）
+    claimedIds.push(local.id);
+  }
+
+  // 4) 普通路径批量 upsert
   for (let i = 0; i < payloads.length; i += BATCH_SIZE) {
     const { error } = await supabase
       .from(table)
-      // 必须显式 onConflict=id：业务唯一索引是 COALESCE 表达式，不能作为冲突目标；
-      // INSERT 载荷显式带 created_at/updated_at，保留历史行时间戳（见云端迁移头注释）
       .upsert(payloads.slice(i, i + BATCH_SIZE), { onConflict: 'id' });
     if (error) throw translateCloudError(error, '云端数据合并失败');
   }
+
+  return claimedIds;
 }
 
-/** 七表顺序合并，全部上传成功后一次性认领匿名行 */
-async function mergeAnonymousData(db: SQLiteDatabase, userId: string): Promise<void> {
+/**
+ * 七表顺序合并，逐表容错：单表失败只记录、不炸断其他表与后续拉取，
+ * 且只精确认领成功表的行（失败表匿名行保持 user_id IS NULL，下次首登可重试）。
+ * 返回 hadFailures 供调用方决定是否清除首登缓存以允许重试。
+ */
+async function mergeAnonymousData(
+  db: SQLiteDatabase,
+  userId: string,
+): Promise<{ hadFailures: boolean }> {
+  let hadFailures = false;
   for (const table of CLOUD_TABLES) {
-    await mergeTable(db, table, userId);
+    try {
+      const claimedIds = await mergeTable(db, table, userId);
+      await claimRowsByIds(db, table, claimedIds, userId);
+    } catch (error) {
+      hadFailures = true;
+      console.error(`[sync] 首登合并失败：${table}`, error);
+    }
   }
-  await claimAnonymousRows(db, userId);
+  return { hadFailures };
 }
 
 // ---------- 水位增量拉取 ----------
@@ -308,10 +396,19 @@ export function firstSyncForUser(userId: string): Promise<void> {
 
   const promise = enqueue(userId, async () => {
     const db = await getDatabase();
-    await mergeAnonymousData(db, userId);
+    // 合并逐表容错：部分表失败也不能挡住拉取——已上云的同 id 行（如 persons）
+    // 要靠 pullAll 按主键合回本机缓存，登录后 UI 才不会因匿名行未认领而空白
+    const { hadFailures } = await mergeAnonymousData(db, userId);
     await pullAll(db, userId);
+    if (hadFailures) {
+      // enqueue 为保持串行链不断会吞掉 job 抛错，rejection 分支清缓存不可靠，
+      // 必须在 job 内主动清除：否则本次运行期内回前台/写后都命中缓存承诺短路，
+      // 失败表要等 App 重启才重试。匿名行仍在，ACTIVE/写后会重新合并。
+      firstSyncs.delete(userId);
+      throw new Error('部分表首登合并失败，匿名行已保留，将在下次联网时重试');
+    }
   });
-  // 失败后移除缓存，允许 ACTIVE / 写后重试
+  // 双保险：当前 enqueue 吞错使 rejection 分支不会触发，若日后队列改造透传错误可兜底
   const tracked = promise.then(() => undefined, () => {
     firstSyncs.delete(userId);
   });
@@ -356,14 +453,17 @@ export function initSync(): void {
       void firstSyncForUser(session.user.id);
     }
   });
+}
 
-  // 回前台：补跑首登同步（离线冷启动场景）+ 增量拉取
-  AppState.addEventListener('change', (state) => {
-    if (state !== 'active') return;
-    const userId = getCurrentUserId();
-    if (!userId) return;
-    void firstSyncForUser(userId).then(schedulePull);
-  });
+/**
+ * 回前台补跑（由根布局的 AppState 监听在 active 时调用）：
+ * 离线冷启动后回联网补首登同步，再做一次增量拉取。
+ * RN 生命周期留在组件层（_layout），本模块保持纯逻辑以便 node 环境单测。
+ */
+export function onAppStateActive(): void {
+  const userId = getCurrentUserId();
+  if (!userId) return;
+  void firstSyncForUser(userId).then(schedulePull);
 }
 
 // ---------- 退出登录 ----------
