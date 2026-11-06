@@ -774,12 +774,13 @@
     - **IPv6 套接字选项冲突**：求职站 vhost 已对 `[::]:443` 指定 `ipv6only=on`（socket 级选项不可重复），新 vhost 改为 `listen [::]:443 ssl;` 不带该选项，`nginx -t` 通过；
     - **「节日文案漂移端午」排查定论（非生产缺陷）**：公网 curl 中秋/春节稳定回端午、礼物报 relation 非法，根因是 Windows Git Bash 的 `curl -d` 内联中文按系统 GBK 代码页发字节、服务端按 UTF-8 解成乱码，模型读不到有效字段便回退最高频先验；字节级对照实验双向证实——真 UTF-8（`e4 b8 ad`）载荷两次均正确返回中秋文案、真 GBK（`d6 d0`）载荷稳定复现端午，主机 Linux 原生 UTF-8 全程正常。App 端 RN `fetch`+`JSON.stringify` 恒发 UTF-8，不受影响。
   **待办（需开发者在场）**：翻 `gateway.ts` 开关 true → 随 T58 真机匿名/登录两通道各生成祝福与礼物 → 反代稳定后再切 `supabase.ts` 数据通道 base URL → 收口动作（轮换 DeepSeek key、撤销重建 sbp_ 令牌、SSH 加固、网关稳定一个版本后停用旧 Edge 函数）。
-  ⑧ **2026-11-05 新增一键换机部署脚本（提交 `4ea12f4`/`b4d1118`，`server/deploy/`）**：本机 `deploy.sh` + 主机幂等 `remote/setup-host.sh` + `@@占位@@` 模板 + `MIGRATION.md`，本地仅干跑验证（语法/渲染/LF），**尚未端到端实跑**。
-     - ⏰ **2026-11-06 开工第一件事：在当前生产主机（124.223.173.79）试跑 `bash server/deploy/deploy.sh` 验证幂等**（用户已点名）。
-     - 准备 `server/deploy/deploy.env`（gitignore，勿提交）：`SUPABASE_ANON_KEY` 取 `rnapp/src/lib/supabase.ts`；**`DEEPSEEK_API_KEY` 现仅存主机 `/www/wwwroot/xinyi-gateway/ecosystem.config.cjs`（600），先 `ssh` 读出再填**，本地仓库无此密钥。
-     - 跑前安全比对：先用模板按现网变量渲染 Nginx/ecosystem，与主机现网 `/etc/nginx/conf.d/xinyi-api.conf`、`ecosystem.config.cjs` `diff` 确认等价；脚本本身会先存 `.bak.时间戳` 且 `nginx -t` 失败自动回滚，不影响同机求职站（3000）。
-     - 跑后验收：`pm2 list` 在线、`curl https://api.talentspec.top/health` 200、`/auth/v1/settings` 带 anon 200、求职站 3000 正常；随后顺接 T58 **9.6 确定性复测**（主机 `tail -f /var/log/nginx/access.log` 盯手机 IP 的 auth/rest 200 + 手机冷启动，排除 index 守卫时序竞态）。
-     - 回滚：Nginx 用 `.bak.时间戳` 还原；PM2 `pm2 reload`；异常先 `pm2 logs xinyi-gateway`。
+  ⑧ **一键换机部署脚本（`server/deploy/`，本机 `deploy.sh` + 主机幂等 `remote/setup-host.sh` + `@@占位@@` 模板 + `MIGRATION.md`）**。
+     - ✅ **2026-11-06 生产主机幂等试跑通过**（用户在场逐步确认，DNS 未动、求职站零影响）。跑前用 deploy.env 渲染模板与现网 Nginx/ecosystem `diff` 确认实质等价；实跑全绿：依赖跳过安装→ecosystem 渲染（600）→证书已存在跳过→Nginx 渲染（旧配置备份 `xinyi-api.conf.bak.20261106100244`、`nginx -t` 过才 reload）→PM2 平滑 reload→两级 health 200→runtime 含密钥文件自动删除。公网复验：`/health` 200（0.13s）、`/auth/v1/settings` 带 anon 200（`email:true`）、`/rest/v1/persons` 200 `[]`、`talentspec.top` 200、匿名祝福端到端 200（1.29s 出中文文案，DeepSeek key 注入有效）。
+     - **试跑抓出并修复两个脚本缺陷**（本次提交）：① `scp` 端口参数应为大写 `-P`，原与 `ssh` 的小写 `-p` 共用一套选项，导致 `scp: stat local "22"`——拆成 `SSH_OPTS`(-p)/`SCP_OPTS`(-P)；② OpenCloudOS/宝塔的 dnf 源 `exclude` 了 nginx，批量 `dnf install nginx ...` 报 `Unable to find a match` 整体失败——改 `ensure_pkg` 逐个「`command -v` 已存在即跳过、缺失才装」，并对 nginx 只认 `-v` 做版本探测容错。
+     - 密钥准备（换机仍适用）：`deploy.env`（gitignore）的 `SUPABASE_ANON_KEY` 取 `rnapp/src/lib/supabase.ts`；`DEEPSEEK_API_KEY` 仅存主机 `ecosystem.config.cjs`（600），先 ssh 读出（指纹核对，勿回显明文）。`CERT_EMAIL` 现填 sunwang1101@aliyun.com（现网 certbot 账号本无邮箱，自动续期不依赖邮箱；换机首签时生效）。
+     - 遗留观察（无害、未擅自删）：`/etc/letsencrypt/renewal-hooks/deploy/` 下有 `nginx-reload.sh`（早先手动建）与脚本新建的 `reload-nginx.sh` 两个等价 reload hook，功能重复无副作用，收口时确认内容后可二选一。
+     - 回滚：Nginx 用 `.bak.时间戳` 还原；PM2 `pm2 reload ecosystem.config.cjs`；异常先 `pm2 logs xinyi-gateway`。
+     - 下一步顺接 T58 **9.6 确定性复测**：主机 `tail -f /var/log/nginx/access.log` 盯**手机出口 IP** 的 auth/rest 200 + 手机杀进程冷启动（让 index 守卫跑在 session 恢复后），排除时序竞态，再做一次云端写验证 claim。
 
 ### T58　账号链路真机验收
 

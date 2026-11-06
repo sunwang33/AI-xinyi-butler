@@ -35,8 +35,13 @@ command -v scp >/dev/null || { echo "✗ 未找到 scp" >&2; exit 1; }
 # 变量里的 ~ 不会自动展开，手动替换为本机 HOME
 SSH_KEY_EXP="${SSH_KEY/#\~/$HOME}"
 REMOTE="$SSH_USER@$SSH_HOST"
-SSH_OPTS=(-p "${SSH_PORT:-22}" -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new)
-[ -n "${SSH_KEY:-}" ] && SSH_OPTS=(-i "$SSH_KEY_EXP" "${SSH_OPTS[@]}")
+PORT="${SSH_PORT:-22}"
+# 通用连接选项（不含端口）：私钥 + 超时 + 主机键策略
+SSH_BASE=(-o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new)
+[ -n "${SSH_KEY:-}" ] && SSH_BASE=(-i "$SSH_KEY_EXP" "${SSH_BASE[@]}")
+# 注意 ssh 端口参数是小写 -p，scp 是大写 -P，不能共用同一套选项
+SSH_OPTS=("${SSH_BASE[@]}" -p "$PORT")   # 供 ssh
+SCP_OPTS=("${SSH_BASE[@]}" -P "$PORT")   # 供 scp
 
 info() { printf '\033[36m▶ %s\033[0m\n' "$*"; }
 ok()   { printf '\033[32m✓ %s\033[0m\n' "$*"; }
@@ -61,13 +66,13 @@ ssh "${SSH_OPTS[@]}" "$REMOTE" "mkdir -p '$APP_DIR'/src '$APP_DIR'/test '$APP_DI
 
 # ---------- 2. 上传代码与部署物料 ----------
 info "上传网关代码（src/test/package.json）"
-scp "${SSH_OPTS[@]}" -r "$SERVER_DIR/src" "$SERVER_DIR/test" "$SERVER_DIR/package.json" "$REMOTE:$APP_DIR/"
+scp "${SCP_OPTS[@]}" -r "$SERVER_DIR/src" "$SERVER_DIR/test" "$SERVER_DIR/package.json" "$REMOTE:$APP_DIR/"
 
 info "上传部署模板与主机脚本"
-scp "${SSH_OPTS[@]}" -r "$DEPLOY_DIR/remote/." "$REMOTE:$APP_DIR/deploy/remote/"
+scp "${SCP_OPTS[@]}" -r "$DEPLOY_DIR/remote/." "$REMOTE:$APP_DIR/deploy/remote/"
 
 info "上传运行时变量（600 权限，部署完主机侧自删）"
-scp "${SSH_OPTS[@]}" "$RUNTIME_LOCAL" "$REMOTE:$APP_DIR/deploy/deploy.runtime.env"
+scp "${SCP_OPTS[@]}" "$RUNTIME_LOCAL" "$REMOTE:$APP_DIR/deploy/deploy.runtime.env"
 ssh "${SSH_OPTS[@]}" "$REMOTE" "chmod 600 '$APP_DIR/deploy/deploy.runtime.env'"
 
 # ---------- 3. 去除 Windows CRLF（Git Bash 上传防护）----------

@@ -62,10 +62,28 @@ WEBROOT="/usr/share/nginx/html"
 # ---------- 1. 系统依赖（OpenCloudOS/RHEL 系，dnf 优先回退 yum）----------
 PM=$(command -v dnf || command -v yum || true)
 [ -n "$PM" ] || die "未找到 dnf/yum，本脚本仅适配 RHEL 系（OpenCloudOS/CentOS/Rocky）"
-info "安装系统依赖：nginx / certbot / nodejs / npm（已装则跳过）"
-$PM install -y nginx certbot nodejs npm >/dev/null 2>&1 || $PM install -y nginx certbot nodejs npm
+
+# 按需安装：命令已存在就跳过。主机源可能 exclude 某些包（如 OpenCloudOS/宝塔环境
+# 把 nginx 排除在默认源外、改由面板或独立源管理），无脑批量 install 会因一个包
+# 找不到而整体失败，故逐个 ensure——缺哪个才装哪个，已装的绝不动。
+ensure_pkg() {
+  local cmd="$1" pkg="$2" ver=""
+  if command -v "$cmd" >/dev/null 2>&1; then
+    # 版本参数不统一：多数命令用 --version，nginx 只认 -v（--version 会报错），做容错
+    ver="$($cmd --version 2>&1 | head -1)" || ver="$($cmd -v 2>&1 | head -1)"
+    ok "$cmd 已存在（$ver），跳过安装"
+    return 0
+  fi
+  info "未检测到 $cmd，通过 $PM 安装 $pkg"
+  $PM install -y "$pkg" || die "$pkg 安装失败：请用主机对应源/面板手动安装 $cmd 后重跑（脚本幂等）"
+}
+ensure_pkg nginx nginx
+ensure_pkg certbot certbot
+ensure_pkg node nodejs
+ensure_pkg npm npm
 
 # Node 主版本需 >=18（网关 engines 要求）
+command -v node >/dev/null 2>&1 || die "未找到 node，请先安装 Node 18+"
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
 [ "$NODE_MAJOR" -ge 18 ] || die "Node 版本过低（$(node -v)），需 >=18"
 ok "Node $(node -v) / npm $(npm -v)"
