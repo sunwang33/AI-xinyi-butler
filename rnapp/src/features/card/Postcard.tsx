@@ -41,6 +41,63 @@ export function wishTypography(length: number): { size: number; lineHeight: numb
   return { size: fontSize.rowTitle, lineHeight: 29 };
 }
 
+/**
+ * 贺卡画面专用：祝福以「抬头 + 标点」开场时剥离开场称呼，
+ * 避免与左上独立渲染的抬头在同一画面重复（2026-11-07 真机发现，开发者拍板方案 A）。
+ * 仅作用于 Postcard 渲染派生——快照、收藏、已送出存储的文案原文一律不改，
+ * 祝福区展示与一键复制仍用完整原文；是否用于手写文案由调用处决定，本函数不感知来源。
+ */
+export function stripLeadingSalutation(
+  wish: string | null,
+  to: string | null,
+): string | null {
+  if (wish === null) return null;
+  const head = to?.trim();
+  if (!head) return wish;
+  if (!wish.startsWith(head)) return wish;
+  const rest = wish.slice(head.length);
+  // 抬头后必须紧跟标点（中英文逗号/冒号、顿号），防止「大佬」误伤「大佬们好」这类前缀
+  const opener = rest.match(/^[，,：:、]\s*/);
+  if (!opener) return wish;
+  const stripped = rest.slice(opener[0].length);
+  // 整条祝福只有称呼时不剥，避免画面空白
+  return stripped.trim().length > 0 ? stripped : wish;
+}
+
+/** 转义正则特殊字符，防止自称中的符号破坏匹配 */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 贺卡画面专用：祝福末尾的「——自称」落款行与右下角独立渲染的署名重复时，
+ * 剥掉文案尾部落款行（2026-11-07 真机发现，与开场称呼重复同批修复，方案 A）。
+ * 仅认「独立成行 + 破折号引导 + 文本等于自称（容忍末尾标点）」的落款，
+ * 不碰正文中间出现的自称；存储/复制原文一律不改。
+ */
+export function stripTrailingSignature(
+  wish: string | null,
+  sign: string | null,
+): string | null {
+  if (wish === null) return null;
+  const tail = sign?.trim();
+  if (!tail) return wish;
+  const lines = wish.split('\n');
+  // 找最后一个非空行
+  let lastIdx = lines.length - 1;
+  while (lastIdx >= 0 && lines[lastIdx].trim() === '') lastIdx -= 1;
+  if (lastIdx < 0) return wish;
+  const lastLine = lines[lastIdx].trim();
+  // 破折号（em/en/连字符 1–2 个）+ 自称 + 可选末尾标点
+  const signatureLine = new RegExp(
+    `^[—–-]{1,2}\\s*${escapeRegExp(tail)}\\s*[。.！!？?]?$`,
+  );
+  if (!signatureLine.test(lastLine)) return wish;
+  const kept = lines.slice(0, lastIdx).join('\n').trimEnd();
+  // 整条祝福只有落款行时不剥，避免画面空白
+  return kept.trim().length > 0 ? kept : wish;
+}
+
 export interface PostcardProps {
   template: CardTemplateDef;
   /** 右下落款区的完整日期，如「2026年11月3日」（排在自称下方） */

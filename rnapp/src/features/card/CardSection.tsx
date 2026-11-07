@@ -34,7 +34,12 @@ import type { SentStateApi } from '../history/useSentRecords';
 import { useBroadcastSnapshot } from '../content/snapshotBroadcast';
 import { colors, fonts, fontSize, radius, spacing } from '../../theme/tokens';
 import { captureCardArt, saveCardToLibrary, shareCardImage } from './export';
-import { Postcard, type CardArtHost } from './Postcard';
+import {
+  Postcard,
+  stripLeadingSalutation,
+  stripTrailingSignature,
+  type CardArtHost,
+} from './Postcard';
 import {
   CARD_ART_SIZE,
   CARD_TEMPLATES,
@@ -375,7 +380,10 @@ export function CardSection({
               template={template}
               dateFull={dateFull}
               to={to}
-              wish={wish}
+              // 画面统一剥离开场称呼与尾部落款（2026-11-07 拍板：手写与 AI 同规则，
+              // 否则预填原文直接保存的手写贺卡会与抬头/署名重复）；仅派生层净化，
+              // editedText、快照、收藏 payload 与一键复制一律保留 wish 原文
+              wish={stripTrailingSignature(stripLeadingSalutation(wish, to), sign)}
               sign={sign}
               onEditWish={openEditor}
               footer={footer}

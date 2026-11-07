@@ -12,7 +12,11 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { Sheet } from '../../components';
 import type { CardPayload, SentRecord } from '../../data/entities';
 import { getRepository } from '../../data/repository';
-import { Postcard } from '../card/Postcard';
+import {
+  Postcard,
+  stripLeadingSalutation,
+  stripTrailingSignature,
+} from '../card/Postcard';
 import { getCardTemplate } from '../card/templates';
 import { colors, fonts, fontSize, spacing } from '../../theme/tokens';
 import { favoriteCardDate } from '../favorites/restore';
@@ -74,7 +78,13 @@ function CardPreviewBody({ record }: { record: SentRecord }) {
   return (
     <>
       {/* 只读成品：不传 onEditWish / footer / artRef，不可编辑、不可导出（G-A4） */}
-      <Postcard template={template} dateFull={dateFull} to={to} wish={wish} sign={sign} />
+      <Postcard
+        template={template}
+        dateFull={dateFull}
+        to={to}
+        wish={stripTrailingSignature(stripLeadingSalutation(wish, to), sign)}
+        sign={sign}
+      />
       <Text
         style={{
           fontFamily: fonts.sans,

@@ -15,7 +15,12 @@ import { ActivityIndicator, Linking, Text, View } from 'react-native';
 import { Button, Sheet } from '../../components';
 import type { CardPayload, Favorite } from '../../data/entities';
 import { getRepository } from '../../data/repository';
-import { Postcard, type CardArtHost } from '../card/Postcard';
+import {
+  Postcard,
+  stripLeadingSalutation,
+  stripTrailingSignature,
+  type CardArtHost,
+} from '../card/Postcard';
 import { captureCardArt, saveCardToLibrary, shareCardImage } from '../card/export';
 import { getCardTemplate } from '../card/templates';
 import { colors, fonts, fontSize, spacing } from '../../theme/tokens';
@@ -123,7 +128,7 @@ function CardExportBody({ favorite }: { favorite: Favorite }) {
             template={template}
             dateFull={dateFull}
             to={to}
-            wish={wish}
+            wish={stripTrailingSignature(stripLeadingSalutation(wish, to), sign)}
             sign={sign}
             artRef={artRef}
           />
