@@ -10,6 +10,13 @@ import { PASSWORD_RESET_PAGE_URL, supabase } from '../../lib/supabase';
 
 type AuthErrorInfo = { message?: string };
 
+/**
+ * 恢复本机会话的兜底超时（T58 真机缺陷修复，2026-11-08）。
+ * 首屏路由守卫要等 ready 后再选数据仓储；若 getSession() 因网络/内部锁挂起，
+ * 超时先按未登录放行，避免首页永久 loading；会话稍后恢复由 onAuthStateChange 接回。
+ */
+const RESTORE_TIMEOUT_MS = 5_000;
+
 /** 把 supabase-js 的英文报错翻译成对用户友好的中文提示 */
 function translateError(error: unknown): Error {
   const raw = (error as AuthErrorInfo | null)?.message ?? '';
@@ -60,13 +67,25 @@ export const useAccountStore = create<AccountState>((set) => ({
   initialize: () => {
     if (initialized) return;
     initialized = true;
-    // 从 AsyncStorage 恢复上次登录会话
-    supabase.auth
+    // 从 AsyncStorage 恢复上次登录会话；带兜底超时，挂起时不卡死首屏
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const restoreSession = supabase.auth
       .getSession()
-      .then(({ data }) => set({ session: data.session, ready: true }))
+      .then(({ data }) => data.session);
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        console.warn('[auth] 恢复登录态超时，先按未登录进入');
+        resolve(null);
+      }, RESTORE_TIMEOUT_MS);
+    });
+    Promise.race([restoreSession, timeout])
+      .then((session) => set({ session, ready: true }))
       .catch((error: unknown) => {
         console.error('[auth] 恢复登录态失败', error);
         set({ ready: true });
+      })
+      .finally(() => {
+        if (timer) clearTimeout(timer);
       });
     // 会话变化（登录 / 退出 / token 自动刷新）随时同步
     supabase.auth.onAuthStateChange((_event, session) => {

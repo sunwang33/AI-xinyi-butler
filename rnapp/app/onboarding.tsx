@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { OnboardingIntro } from '../src/features/persons/OnboardingIntro';
 import { Button, EmptyState, Screen } from '../src/components';
 import { getRepository } from '../src/data/repository';
+import { useAccountStore } from '../src/features/account/authStore';
 import { colors } from '../src/theme/tokens';
 
 /**
@@ -17,11 +18,15 @@ type Status = 'checking' | 'empty' | 'error';
 export default function OnboardingScreen() {
   const router = useRouter();
   const [status, setStatus] = useState<Status>('checking');
+  // 登录态恢复完成前保持 checking，避免拿到匿名仓储误判空库（T58 真机缺陷，2026-11-08）
+  const ready = useAccountStore((s) => s.ready);
+  // 订阅会话：恢复超时先按未登录进入后，会话晚到也能自动接回提醒 Tab
+  const session = useAccountStore((s) => s.session);
 
-  // 复查人数；重试按钮重新执行本逻辑
-  const checkProfile = useCallback(() => {
+  // 纯查询：有人则直落提醒 Tab，无人/失败落到对应状态。
+  // 不含同步 setState，可安全在 useEffect 中调用。
+  const queryProfile = useCallback(() => {
     let active = true;
-    setStatus('checking');
     getRepository()
       .then((repo) => repo.listPersons())
       .then((persons) => {
@@ -40,7 +45,20 @@ export default function OnboardingScreen() {
     };
   }, [router]);
 
+  // 聚焦复查（含重试按钮）：先切 checking 再查询
+  const checkProfile = useCallback(() => {
+    if (!ready) return;
+    setStatus('checking');
+    return queryProfile();
+  }, [ready, queryProfile]);
+
   useFocusEffect(checkProfile);
+
+  // ready/session 变化时静默复查，覆盖冷启动竞态（ready 晚到）
+  // 与恢复超时后会话晚到两种时序；不重置 checking，避免 effect 内同步 setState
+  useEffect(() => {
+    if (ready) return queryProfile();
+  }, [ready, session, queryProfile]);
 
   if (status === 'error') {
     return (

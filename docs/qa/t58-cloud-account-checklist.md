@@ -21,7 +21,7 @@
 | # | 场景 | 预期 | 结果 |
 |---|---|---|---|
 | 1.1 | 邮箱 A 注册并登录 | 登录成功进首页，设置页显示「已登录 · 数据自动同步到云端」 | |
-| 1.2 | 杀进程重开 App | 仍是登录态，不要求重新登录 | |
+| 1.2 | 杀进程重开 App | 仍是登录态，不要求重新登录 | ✅ 2026-11-08 真机：force-stop Expo Go 后深链冷启动（全新 bundle、rootTag=1），直接落提醒 Tab 而非 onboarding 空态，设置页显示「已登录 · sunwang1101@aliyun.com」；JS 日志无 ERROR、无恢复超时告警（截图 `t58-cold-start-ok.png`，缺陷现场对照 `t58-resume.png`） |
 | 1.3 | 忘记密码：收邮件→重置 | 重置页可打开；新密码可登录；旧密码失效 | ✅ 2026-11-06 真机：App 内发起→反代 `/auth/v1/recover` 200→GitHub Pages 重置页改密→新密码 token 200 登录；旧密码 token 400 失效 |
 | 1.4 | 错误密码 / 网络异常文案 | 提示为可读中文，无卡死 | |
 
@@ -106,6 +106,7 @@
 
 1. **贺卡文案重复（称呼 ×2、署名 ×2）**：服务端提示词鼓励开场称呼、强制尾部落款，与贺卡左上抬头/右下署名叠加。拍板方案 A——Postcard 画面派生根净化：`stripLeadingSalutation`（前缀须紧跟标点，防「大佬」误伤「大佬们好」）、`stripTrailingSignature`（落款须独立成行且全文等于自称），剥后为空则不剥。手写与 AI 同规则（手写弹层预填 AI 原文直接保存是主流路径）；editedText、快照、收藏 payload、一键复制全文一律保留原文。三个渲染点（CardSection/FavoriteCardSheet/SentCardSheet）统一套用，13 例单测覆盖。
 2. **手写弹层键盘态面板顶出屏幕**：logcat 实证透明 Modal 的 Dialog 窗口在本机被系统随键盘 resize（overlay 858.7→520.4），与手动 `paddingBottom=键盘高` 双重顶起（sheet y=−81.5）。Sheet 改自适应：`onLayout` 实测 overlay 高度识别 systemResized，resize 设备 padding 归零、maxHeight 按 overlay 封顶；未 resize 设备保留 2026-11-03 老路径。内容区包 ScrollView（`flexShrink:1`）承接超长内容，握把/标题固定。修复后 sheet y=140.95 完整在屏。PersonReminderSheet 同场景复验通过。
+3. **冷启动已登录用户误判空库、落 onboarding 空态（2026-11-08，截图 `t58-resume.png`）**：根因是首屏路由守卫（`app/index.tsx` 的 runCheck、`app/onboarding.tsx` 的 checkProfile）在 `authStore.ready=false` 时就执行，只拿到匿名仓储，已登录用户本地人员行因 user_id 作用域不匹配被判空库。修复三点：① `authStore.initialize` 的 `getSession()` 加 5s 兜底 `Promise.race` 超时——挂起时先按未登录放行（ready=true、session=null），避免首屏永久 loading，会话晚到由 `onAuthStateChange` 接回；② index 守卫等 `ready` 后再跑；③ onboarding 拆出纯查询 `queryProfile`，`ready/session` 变化时 useEffect 静默复查，覆盖 ready 晚到与恢复超时后会话晚到两种时序。新增 `authStore.test.ts` 11 例（ready 门控、超时兜底、会话晚到接回、initialize 幂等、中文报错），全量 22 套件 219 测试绿。
 
 ## 收口结论
 

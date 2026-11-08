@@ -813,6 +813,8 @@
 > - 新增 `src/lib/sync.test.ts` 8 例（真实 node:sqlite 内存库 + PostgREST 链式桩，含两个真机状态回归用例），全量 **20 套件 195 测试绿**、typecheck/lint 双零。工程坑：jest-expo SDK58 下生效的 `@jest-environment node` 会触发 expo/winter require 作用域错误，不写注解跑默认环境即可（默认环境支持 node:sqlite）；mock 桩对象须用懒 `require` 引入被测模块，静态 import 会先于桩常量求值拿到 undefined。
 > - **✅ 2026-11-06 下午冷启动复验通过（清单 3.1/9.6 打勾）**：杀进程重进后主机 okhttp 17 条新请求（15×200＋persons/traits POST 201，零 409）；Metro 出现两条「合并去重」警告（snapshots/card_states 各删 1 冗余行）后无 ERROR；联系人 4 位全部自愈可见，「网络测试」祝福/礼物/贺卡内容核对不丢。**9.3 登录 JWT 通道同会话通过**：PM2 审计 `channel:"user"`  blessing/gift 两条 200、仅 hasPerson 布尔无姓名，截图存 `docs/qa/t58-9.3-user-channel.png`、`t58-after-fix-home.png`，清单已回填。
 > - **待办（下午续）**：9.2 匿名礼物（并入第二组未登录回归）、9.4 限频中文提示、9.5 断网三因；其余组——在线写同步、未登录回归（含 T77 已送出标记重点组）、退出清/留、换号隔离、卸载重装（最后做）；T79 隐私政策。三个提交 `dd8a50f`/`34bbae4`/`17f3aef` 已全部 push 到 origin/main。
+> - **2026-11-07 续验**：2.3–2.6、9.2 真机通过，修贺卡文案重复（画面净化两纯函数、手写与 AI 同规则、13 单测）与 Sheet 键盘双重顶起（Dialog 窗口被系统 resize，自适应 systemResized，修订 11-03 老结论），21 套件 208 绿。
+> - **2026-11-08 冷启动竞态缺陷修复并真机通过（清单 1.2 打勾）**：现象——已登录用户冷启动被误判空库落 onboarding 空态（`docs/qa/t58-resume.png`）。根因——首屏守卫在 `authStore.ready=false` 时先跑，只拿到匿名仓储，账号作用域人员行被判空。修复：`authStore.initialize` 的 `getSession()` 加 5s `Promise.race` 兜底超时（挂起先按未登录放行、会话晚到由 onAuthStateChange 接回）；`app/index.tsx` 守卫等 ready；`app/onboarding.tsx` 拆纯查询 `queryProfile` 并在 ready/session 变化时静默复查。新增 `src/features/account/authStore.test.ts` 11 例，全量 **22 套件 219 测试绿**、typecheck/lint 双零。真机 force-stop 冷启动确定性验证：全新 bundle 直落提醒 Tab、数据完整、设置页已登录，JS 日志零 ERROR 零超时告警（`t58-cold-start-ok.png`）。**续做：2.7 收尾（单人提醒保存闭环、节日关注开关）、9.4/9.5 与四至八组（卸载重装最后）、T79**。
 
 ---
 

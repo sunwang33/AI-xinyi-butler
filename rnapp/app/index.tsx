@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import { Button, EmptyState, Screen } from '../src/components';
 import { getRepository } from '../src/data/repository';
+import { useAccountStore } from '../src/features/account/authStore';
 import { colors } from '../src/theme/tokens';
 
 /**
@@ -15,6 +16,9 @@ type Target = 'loading' | 'error' | 'onboarding' | 'tabs';
 export default function Index() {
   // 初始即为 loading，effect 内不再同步 setState（避免连锁渲染）
   const [target, setTarget] = useState<Target>('loading');
+  // 必须等登录态恢复完成：否则会话未恢复时只会拿到匿名仓储，
+  // 已登录用户会被误判为空库重定向到 /onboarding（T58 真机缺陷，2026-11-08）
+  const ready = useAccountStore((s) => s.ready);
 
   // 读取人员判断档案是否存在；返回 active 清理函数供 effect 卸载时使用
   const runCheck = useCallback(() => {
@@ -32,7 +36,10 @@ export default function Index() {
     };
   }, []);
 
-  useEffect(runCheck, [runCheck]);
+  useEffect(() => {
+    if (!ready) return;
+    return runCheck();
+  }, [ready, runCheck]);
 
   // 重试：事件回调中先回 loading，再重新执行判断逻辑
   const retry = () => {
