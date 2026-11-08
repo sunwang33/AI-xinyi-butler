@@ -14,6 +14,7 @@ import { openTestDb } from '../data/repository/sqlite/sqliteTestDb';
 
 declare const describe: (name: string, fn: () => void) => void;
 declare const beforeEach: (fn: () => void) => void;
+declare const afterEach: (fn: () => void) => void;
 declare const it: (name: string, fn: () => void) => void;
 declare const expect: any;
 declare const jest: any;
@@ -41,9 +42,10 @@ interface CloudRequest {
 const mockCalls: CloudRequest[] = [];
 const mockUpserts: CloudRequest[] = [];
 const mockUpdates: CloudRequest[] = [];
-// 按表预置：主键 in 查重回包 / 业务键 maybeSingle 回包 / 强制报错
+// 按表预置：主键 in 查重回包 / 业务键 maybeSingle 回包 / 强制报错 / 水位拉取回包
 const mockById: Record<string, unknown[]> = {};
 const mockByKey: Record<string, unknown> = {};
+const mockPullRows: Record<string, unknown[]> = {};
 const mockErrorTables = new Set<string>();
 let mockDb: any;
 
@@ -65,6 +67,10 @@ function makeBuilder(table: string): any {
     in(col: string, vals: unknown[]) {
       req.kind = 'in';
       req.filters.push({ col, val: vals });
+      return builder;
+    },
+    gt(col: string, val: unknown) {
+      req.filters.push({ col, val });
       return builder;
     },
     limit() {
@@ -102,8 +108,8 @@ function makeBuilder(table: string): any {
         mockUpdates.push(req);
         result = { data: null, error: null };
       } else {
-        // pullAll 的 select *：默认空，不拉任何远端行
-        result = { data: [], error: null };
+        // pullAll 的 select *：默认空，不拉任何远端行；用例可经 mockPullRows 预置
+        result = { data: mockPullRows[table] ?? [], error: null };
       }
       return Promise.resolve(result).then(onFulfilled);
     },
@@ -145,7 +151,7 @@ jest.mock('../data/repository/supabase/SupabaseRepository', () => ({
 // 懒加载被测模块：静态 import 会先于下方 mockSupabase/mockDb 常量求值，
 // 导致 mock 工厂闭包拿到 undefined；require 确保 jest.mock 与桩对象都就绪后再加载 sync
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { firstSyncForUser } = require('./sync');
+const { firstSyncForUser, onAppStateActive } = require('./sync');
 
 // ---------- 测试数据造数 ----------
 
@@ -186,6 +192,7 @@ describe('firstSyncForUser 首登静默合并（T58 三缺陷回归）', () => {
     mockUpdates.length = 0;
     for (const key of Object.keys(mockById)) delete mockById[key];
     for (const key of Object.keys(mockByKey)) delete mockByKey[key];
+    for (const key of Object.keys(mockPullRows)) delete mockPullRows[key];
     mockErrorTables.clear();
   });
 
@@ -354,5 +361,100 @@ describe('firstSyncForUser 首登静默合并（T58 三缺陷回归）', () => {
     const row = await mockDb.getFirstAsync('SELECT id, user_id FROM sent_records');
     expect(row.id).toBe('s-cloud');
     expect(row.user_id).toBe('user-f');
+  });
+});
+
+describe('水位增量拉取（T58 4.2 真机回归）', () => {
+  beforeEach(async () => {
+    mockDb = await openTestDb();
+    mockCalls.length = 0;
+    mockUpserts.length = 0;
+    mockUpdates.length = 0;
+    for (const key of Object.keys(mockById)) delete mockById[key];
+    for (const key of Object.keys(mockByKey)) delete mockByKey[key];
+    for (const key of Object.keys(mockPullRows)) delete mockPullRows[key];
+    mockErrorTables.clear();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** 识别某表 pullAll 周期发出的 select * 拉取请求 */
+  function pullRequestsOf(table: string): CloudRequest[] {
+    return mockCalls.filter(
+      (c) =>
+        c.table === table &&
+        c.kind === undefined &&
+        c.filters.some((f) => f.col === '__select__' && f.val === '*'),
+    );
+  }
+
+  it('回前台两次：首拉建立水位并 upsert 一行，二次拉取带 updated_at gt 水位且空回包不重复写本机', async () => {
+    // Dashboard 另端改了一行：首轮拉取返回该 persons 行（updated_at=T2）
+    mockPullRows.persons = [
+      {
+        id: 'p-cloud',
+        name: '同步测试改',
+        relation: '挚友',
+        birthday_month: 11,
+        birthday_day: 25,
+        birth_year: null,
+        salutation: null,
+        signature: null,
+        user_id: 'mock-user',
+        created_at: T1,
+        updated_at: T2,
+        deleted: false,
+      },
+    ];
+
+    // —— 第一次回前台：首登缓存未建立，merge（无匿名行零请求）后全量拉取 ——
+    onAppStateActive();
+    await jest.advanceTimersByTimeAsync(0);
+
+    // 首拉无水位：persons 请求不带 updated_at 过滤；行已入本机缓存且水位写成 T2
+    const firstPull = pullRequestsOf('persons');
+    expect(firstPull).toHaveLength(1);
+    expect(firstPull[0].filters.some((f) => f.col === 'updated_at')).toBe(false);
+    let rows = await mockDb.getAllAsync('SELECT id, user_id FROM persons');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('p-cloud');
+    let cursor = await mockDb.getFirstAsync(
+      "SELECT last_pulled_at FROM sync_cursors WHERE table_name = 'persons'",
+    );
+    expect(cursor.last_pulled_at).toBe(T2);
+
+    // 回前台防抖（8s）到点后的 schedulePull：水位已建，本次起 persons 必带 gt
+    await jest.advanceTimersByTimeAsync(8000);
+    expect(
+      pullRequestsOf('persons').some((c) =>
+        c.filters.some((f) => f.col === 'updated_at' && f.val === T2),
+      ),
+    ).toBe(true);
+
+    // —— 第二次回前台：云端已无更新（模拟真机第二次切前后台）——
+    mockCalls.length = 0;
+    mockPullRows.persons = [];
+    onAppStateActive();
+    await jest.advanceTimersByTimeAsync(0);
+    // firstSyncs 命中缓存承诺：merge 阶段不发任何云端请求
+    expect(mockCalls).toHaveLength(0);
+
+    await jest.advanceTimersByTimeAsync(8000);
+
+    // 增量拉取只发一次且必带水位 gt=T2，不再全量 select
+    const secondCyclePulls = pullRequestsOf('persons');
+    expect(secondCyclePulls).toHaveLength(1);
+    expect(secondCyclePulls[0].filters).toContainEqual({ col: 'updated_at', val: T2 });
+    // 空回包：本机仍是同一行，不重复、不丢失，水位不变
+    rows = await mockDb.getAllAsync('SELECT id, user_id FROM persons');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('p-cloud');
+    cursor = await mockDb.getFirstAsync(
+      "SELECT last_pulled_at FROM sync_cursors WHERE table_name = 'persons'",
+    );
+    expect(cursor.last_pulled_at).toBe(T2);
   });
 });

@@ -45,7 +45,7 @@
 | # | 场景 | 预期 | 结果 |
 |---|---|---|---|
 | 3.1 | 用含「网络测试」资料的未登录库登录 A | 无弹窗、无 loading 死等；登录后该人员与全部快照/收藏/已送出仍在 | ✅ 2026-11-06（修复五缺陷后冷启动复验）：4 位联系人全在、「网络测试」祝福/礼物/贺卡内容核对不丢、无弹窗死等；收藏与已送出流水待历史 Tab 补核 |
-| 3.2 | Supabase Dashboard 核对 | persons 等 7 表出现该人员行，user_id=A，原本机 UUID 保留、created_at 未被覆盖 | |
+| 3.2 | Supabase Dashboard 核对 | persons 等 7 表出现该人员行，user_id=A，原本机 UUID 保留、created_at 未被覆盖 | ✅ 2026-11-08 Dashboard 眼见：persons 6 行 user_id 全为 A（`fc67221b-c6d0-4865-a0cb-e667fa97830c`）无 null，id 为 App 生成 UUID、created_at 保留 App 写入值未被云端 default 覆盖；favorites 6 行、sent_records 2 行同样 user_id=A 且 payload 完整。anniversaries/traits/content_snapshots/card_states 四表于 2026-11-06 首登合并时经主机 okhttp 七表合并 200 日志验证 |
 | 3.3 | 合并后杀进程重开 | 数据不重复、不丢失 | |
 | 3.4 | （如方便）同一条记录两端都改过 | updated_at 新者胜 | |
 
@@ -53,8 +53,8 @@
 
 | # | 场景 | 预期 | 结果 |
 |---|---|---|---|
-| 4.1 | 登录态在线新增人员、生成内容、收藏、标记、贺卡操作 | 操作成功；Dashboard 可见对应行；写后约 8s 内同步 | |
-| 4.2 | 下拉/切前后台触发增量同步 | 另端改动（Dashboard 手改一行）能拉回；水位增量不重复拉 | |
+| 4.1 | 登录态在线新增人员、生成内容、收藏、标记、贺卡操作 | 操作成功；Dashboard 可见对应行；写后约 8s 内同步 | ✅ 2026-11-08 真机＋Dashboard：在线新增「同步测试」（挚友）后 App 联系人即时 5→6 位、logcat 零 ERROR；Dashboard persons 立见该行（id `6041de13…`、user_id=A、created_at=updated_at 保留写入时刻、deleted=false）。write-through 设计：云端 POST 成功才回写本机，故能进列表即证明已上云。内容类在线写：favorites 6 行（blessing×2/gift×3/card×1）、sent_records 2 行均在云端 |
+| 4.2 | 下拉/切前后台触发增量同步 | 另端改动（Dashboard 手改一行）能拉回；水位增量不重复拉 | ✅ 2026-11-08 真机：① **另端改动拉回**——Dashboard 把 persons 行 `6041de13…` 的 name「同步测试」改「同步测试改」并 Save（21:37 App 仍旧名），App 切后台再回前台触发 `onAppStateActive`（首登缓存命中＋8s 防抖 `schedulePull`），21:38 联系人列表自动变「同步测试改」；uiautomator dump 精确匹配新名、旧名 `text="同步测试"` 0 匹配，列表仍「共 6 位」证明是原地 upsert 而非新增第 7 行。② **再切一次前后台**：dump 仍 6 行、新名保持、无重复无丢失。③ **水位不重复拉**（三层证据，真机 logcat 通道受限：SDK58 JS console 走 Metro 不进 logcat、supabase-js 默认不打 okhttp URL，设备侧取不到请求参数）——代码层 `sync.ts pullTable`：有 cursor 必带 `gt('updated_at', cursor)` 只拉增量、空结果提前 return 零写入、成功后 `setCursor` 推进水位；新增单测 `sync.test.ts`「回前台两次」用例：首拉无 gt 建水位 T2 并 upsert 1 行，二次回前台 merge 缓存短路零请求、防抖拉取断言带 `updated_at gt T2`、空回包后本机仍 1 行不重复、水位不变。全量 22 套件 220 测试绿、typecheck/lint 零告警 |
 | 4.3 | 云端故障时写入 | 报错为真实中文原因，不冒充「本地写入失败」 | |
 
 ## 五、登录态离线只读（G-A6，T78 联网门控）
