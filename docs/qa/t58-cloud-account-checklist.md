@@ -46,7 +46,7 @@
 |---|---|---|---|
 | 3.1 | 用含「网络测试」资料的未登录库登录 A | 无弹窗、无 loading 死等；登录后该人员与全部快照/收藏/已送出仍在 | ✅ 2026-11-06（修复五缺陷后冷启动复验）：4 位联系人全在、「网络测试」祝福/礼物/贺卡内容核对不丢、无弹窗死等；收藏与已送出流水待历史 Tab 补核 |
 | 3.2 | Supabase Dashboard 核对 | persons 等 7 表出现该人员行，user_id=A，原本机 UUID 保留、created_at 未被覆盖 | ✅ 2026-11-08 Dashboard 眼见：persons 6 行 user_id 全为 A（`fc67221b-c6d0-4865-a0cb-e667fa97830c`）无 null，id 为 App 生成 UUID、created_at 保留 App 写入值未被云端 default 覆盖；favorites 6 行、sent_records 2 行同样 user_id=A 且 payload 完整。anniversaries/traits/content_snapshots/card_states 四表于 2026-11-06 首登合并时经主机 okhttp 七表合并 200 日志验证 |
-| 3.3 | 合并后杀进程重开 | 数据不重复、不丢失 | |
+| 3.3 | 合并后杀进程重开 | 数据不重复、不丢失 | ✅ 2026-11-08 真机（登录 A 态，杀进程前联系人「共 7 位」）：`adb shell am force-stop host.exp.exponent` 彻底杀进程（pid 消亡）后深链冷启动。**壳层冷启竞态（非 App 缺陷，如实记录）**：force-stop 后首条 `am start -d exp://127.0.0.1:8081/--/contacts` 虽返回 Starting 成功，但 Expo Go 冷启没接住 URL、进程起来后停在 HomeActivity（Development servers 主页，焦点 `com.miui.home`→`host.exp.exponent/.experience.HomeActivity`）；在 Expo Go 已存活时重发同一深链，3s 内即正常加载 bundle 落入联系人页。**数据断言全过**：冷启后联系人仍「共 7 位」与杀前一致；uiautomator dump 按卡片容器 `content-desc` 统计得 7 条、`sort -u` 去重后仍 7 条（七张卡全唯一、无重复行），七名齐全——妈妈（6/5）、测试同事（11/1）、网络测试（11/6）、测试人员（11/20）、测试大佬（11/21）、同步测试改（11/25）、故障测试（11/26，在视口底部仅渲染容器 content-desc）；精确 `text="人名"` 节点视口内 6 人各 1 次无重复；全屏无 ERROR/失败/异常/重试类报错文案。机制：SQLite 落盘跨进程持久化＋会话恢复后 registry 重建云仓储（inner=SqliteRepository，scopeUserId=A），首登合并结果不依赖内存态，故杀进程重开不丢不重 |
 | 3.4 | （如方便）同一条记录两端都改过 | updated_at 新者胜 | |
 
 ## 四、在线写与同步
