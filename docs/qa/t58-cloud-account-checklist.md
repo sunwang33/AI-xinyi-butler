@@ -98,7 +98,7 @@
 | 9.1 | App 开关置 `USE_SHANGHAI_GATEWAY=true`，真机**不挂代理**匿名生成祝福 | 走 api.talentspec.top 成功返回，条数正确 | ✅ 2026-11-05（前序会话，双兜底后换新文案成功） |
 | 9.2 | 匿名生成礼物（有人对象） | 成功，≥5 个且三字段齐全 | ✅ 2026-11-07：匿名礼物 6 条，名称/理由/「去看看」三字段齐（随第二组未登录回归一并验收） |
 | 9.3 | 登录 A 后生成（带 JWT） | 成功；主机日志 channel=user，无姓名特征 | ✅ 2026-11-06 13:19：PM2 审计两条 `channel:"user"`（blessing count=5 / gift count=6，均 200），日志仅 `hasPerson:true` 无姓名；Nginx 两 POST 200；截图 `t58-9.3-user-channel.png` 礼物名称/理由/去看看三字段齐 |
-| 9.4 | 连续请求触发限频 | 收到「请求过于频繁，请稍后再试」中文提示 | 待做 |
+| 9.4 | 连续请求触发限频 | 收到「请求过于频繁，请稍后再试」中文提示 | ✅ 2026-11-08（开发者拍板认可三层证据，不退出登录眼见）：① 真机 adb shell curl 从手机网络连发 25 次空 body POST（限频在 body 校验/DeepSeek 之前，**零 AI 配额**）——前 24 次 400 bad_json、第 25 次 **429 `{error:{code:'rate_limited',message:'请求过于频繁，请稍后再试'}}`**，anon 24/min 滑动窗口精确生效；② App 映射有单测 `api.test.ts`「429→ratelimit」；③ UI 文案分支已审查：BlessingSection/GiftSection 对 reason=ratelimit 显「请求有点频繁，请稍等一会儿再试」（空态）/「…仍保留上次的…」（有内容）。注：App 不直显服务端 message，按 reason 用本地文案，措辞与服务端不同属设计如此 |
 | 9.5 | 断网/主机异常 | 提示与 Edge 通道一致（network/ratelimit/service 三因） | 待做 |
 | 9.6 | 数据通道切换（SUPABASE_URL 改子域，9.1–9.5 稳后） | 登录/同步在国内网络不挂代理可用 | ✅ 2026-11-06：冷启动 okhttp 17 条新请求（15×200＋2×201，零 409/4xx/5xx）；五缺陷修复（`dd8a50f`/`34bbae4`）后 Metro 见两条「合并去重」警告、无 ERROR；联系人 UI 自愈（截图 `t58-after-fix-home.png`） |
 
