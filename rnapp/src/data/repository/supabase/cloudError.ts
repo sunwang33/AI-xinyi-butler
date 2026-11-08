@@ -11,7 +11,8 @@ export function translateCloudError(
   const raw = error?.message ?? '';
   const code = error?.code ?? '';
   const haystack = `${raw} ${code}`;
-  if (/PGRST116|0 rows|no rows/i.test(raw)) {
+  // PGRST116 错误码在 code 字段、message 是另一句英文，须查 haystack（raw+code）
+  if (/PGRST116|0 rows|no rows/i.test(haystack)) {
     return new Error('目标数据不存在或已被删除');
   }
   if (/network request failed|failed to fetch|NetworkError|timeout/i.test(raw)) {
